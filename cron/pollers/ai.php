@@ -134,6 +134,11 @@ function poll_ai(): string {
             'equity'           => $h['equity'],
         ], $holdings);
         $context = json_encode([
+            // Give the model the exact totals so it never has to sum per-holding
+            // equity itself (small models hallucinate the grand total otherwise).
+            'total_equity'          => $summary['total_equity'] ?? null,
+            'daily_change_percent'  => $summary['daily_change_percent'] ?? null,
+            'daily_change_dollar'   => $summary['daily_change_dollar'] ?? null,
             'holdings'              => $slim,
             'top_movers'            => array_slice(kv_get('portfolio:movers') ?? [], 0, 5),
             'finance_and_macro_news'=> ai_headlines(array_values(array_filter(
