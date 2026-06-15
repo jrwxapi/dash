@@ -67,8 +67,7 @@ html, body {
   transform-origin: center center;
   will-change: transform;
   position: relative;
-  background:
-    linear-gradient(180deg, oklch(0.175 0.008 258), var(--bg));
+  background: #282828;
   overflow: hidden;
 }
 /* faint grid texture */
@@ -384,11 +383,28 @@ html, body {
 .holdings { flex: 1; min-height: 0; overflow: hidden; position: relative; }
 .holdings-head {
   display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 8px;
-  padding: 7px 16px; font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase;
+  /* right padding = row padding (16px) + reserved scrollbar gutter (9px) so the
+     header columns line up with the scrolled rows below */
+  padding: 7px 25px 7px 16px; font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase;
   color: var(--tx-4); border-bottom: 1px solid var(--border-soft); flex: none;
 }
 .holdings-head .r { text-align: right; }
-.holdings-scroll { position: absolute; inset: 28px 0 0; overflow: hidden; }
+/* User-scrolled holdings list with a visible scrollbar (kiosk-wide hidden
+   scrollbar rule is overridden here). scrollbar-gutter keeps the layout from
+   shifting when the list does/doesn't overflow. */
+.holdings-scroll {
+  position: absolute; inset: 28px 0 0;
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.holdings-scroll::-webkit-scrollbar { width: 9px; height: 9px; display: block; }
+.holdings-scroll::-webkit-scrollbar-track { background: transparent; }
+.holdings-scroll::-webkit-scrollbar-thumb {
+  background: var(--border); border-radius: 5px;
+  border: 2px solid transparent; background-clip: padding-box;
+}
+.holdings-scroll::-webkit-scrollbar-thumb:hover { background: var(--panel-hi); background-clip: padding-box; }
 .holdings-track { display: flex; flex-direction: column; }
 .hrow {
   display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 8px; align-items: center;
@@ -407,11 +423,27 @@ html, body {
 /* ============================================================
    NEWS (global + cyber shared)
    ============================================================ */
-.news-scroll { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+/* Global / Cyber / POTUS are user-scrolled with a visible scrollbar (the
+   kiosk-wide hidden-scrollbar rule is overridden below). Holdings + ticker
+   stay auto-scrolling via their own classes. */
+.news-scroll {
+  flex: 1; min-height: 0; position: relative;
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.news-scroll::-webkit-scrollbar { width: 9px; height: 9px; display: block; }
+.news-scroll::-webkit-scrollbar-track { background: transparent; }
+.news-scroll::-webkit-scrollbar-thumb {
+  background: var(--border); border-radius: 5px;
+  border: 2px solid transparent; background-clip: padding-box;
+}
+.news-scroll::-webkit-scrollbar-thumb:hover { background: var(--panel-hi); background-clip: padding-box; }
 .news-track { display: flex; flex-direction: column; }
 .nart {
   padding: 11px 15px; border-bottom: 1px solid var(--border-soft);
   display: flex; flex-direction: column; gap: 5px;
+  position: relative;   /* anchors the finance ribbon + new-item bar */
+  transition: background-color .8s ease, box-shadow .8s ease;
 }
 .nart .top { display: flex; align-items: center; gap: 8px; }
 .nart .src {
@@ -450,7 +482,43 @@ html, body {
 /* cyber digest list */
 .cyber-art {
   padding: 11px 15px; border-bottom: 1px solid var(--border-soft);
+  position: relative;
+  transition: background-color .8s ease, box-shadow .8s ease;
 }
+
+/* Articles are links to their source — keep the card's own typography. */
+a.nart, a.cyber-art { text-decoration: none; color: inherit; cursor: pointer; }
+a.cyber-art { display: block; }
+a.nart:hover, a.cyber-art:hover { background: var(--panel-2); }
+
+/* ── New-item highlight (manual-scroll feeds) ──
+   Items published within the per-feed window get .is-new (panels.js). The
+   highlight fades horizontally (left→right) across all three feeds; the left
+   accent bar fades out via the transition above once the item ages out. */
+.nart.is-new, .cyber-art.is-new {
+  background: linear-gradient(90deg, var(--acc-dim) 0%, transparent 70%);
+  box-shadow: inset 3px 0 0 var(--acc);
+  animation: newItemH 1.1s ease-out;
+}
+a.nart.is-new:hover, a.cyber-art.is-new:hover {
+  background: linear-gradient(90deg, var(--acc-dim) 0%, var(--panel-2) 70%);
+}
+@keyframes newItemH {
+  0%   { background: linear-gradient(90deg, var(--acc-line) 0%, transparent 70%); }
+  100% { background: linear-gradient(90deg, var(--acc-dim) 0%, transparent 70%); }
+}
+.nart.is-new::after, .cyber-art.is-new::after {
+  content: 'NEW';
+  position: absolute; top: 9px; right: 13px;
+  font-family: 'IBM Plex Mono'; font-size: 8px; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--acc); padding: 1px 5px; border-radius: 4px;
+  background: var(--acc-dim); border: 1px solid var(--acc-line);
+  pointer-events: none;
+}
+/* POTUS/global items already show a "time" at top-right — nudge it clear of the pill */
+.nart.is-new .time { margin-right: 38px; }
+/* cyber headline spans full width — reserve space so the pill never overlaps it */
+.cyber-art.is-new .c-ttl { padding-right: 42px; }
 .cyber-art .c-body { min-width: 0; }
 .cyber-art .c-ttl { font-size: 13px; line-height: 1.32; color: var(--tx); font-weight: 500; margin-bottom: 5px; text-wrap: pretty; }
 .cyber-art .c-meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
@@ -552,6 +620,51 @@ html, body {
 .tk-item .tk-chg.down { color: var(--loss); }
 .tk-item .tk-arrow.up { color: var(--gain); }
 .tk-item .tk-arrow.down { color: var(--loss); }
+
+/* ============================================================
+   CONFIG KEBABS (⋮) + INLINE CONFIG MODAL
+   ============================================================ */
+.kebab {
+  appearance: none; background: none; border: 0; cursor: pointer;
+  color: var(--tx-4); font-size: 17px; line-height: 1;
+  padding: 1px 5px; border-radius: 5px; flex-shrink: 0;
+  transition: color .15s, background .15s;
+}
+.kebab:hover, .kebab:focus-visible { color: var(--acc); background: var(--acc-dim); outline: none; }
+.brand .kebab { margin-left: 4px; align-self: flex-start; }
+
+.cfg-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: oklch(0 0 0 / 0.55); backdrop-filter: blur(2px);
+}
+.cfg-overlay[hidden] { display: none; }
+.cfg-modal {
+  width: min(640px, 92vw);
+  display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden;
+  box-shadow: 0 24px 60px oklch(0 0 0 / 0.6);
+}
+.cfg-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--panel-2);
+}
+.cfg-title {
+  flex: 1; font-size: 12px; font-weight: 700; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--tx-2);
+}
+.cfg-close {
+  appearance: none; width: 26px; height: 26px; border-radius: 6px;
+  border: 1px solid var(--border); background: transparent; color: var(--tx-3);
+  cursor: pointer; font-size: 12px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.cfg-close:hover, .cfg-close:focus-visible { color: var(--loss); border-color: var(--loss); background: var(--loss-dim); outline: none; }
+.cfg-frame {
+  border: 0; width: 100%; height: 340px; max-height: 80vh; display: block; background: var(--bg);
+}
 
 /* ============================================================
    ANIMATION + MOTION

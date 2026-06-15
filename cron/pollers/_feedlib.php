@@ -1,37 +1,40 @@
 <?php
 /**
- * News poller — aggregates RSS feeds into the global and cyber panels.
- * Port of workers/news_poller.py (minus yfinance per-ticker stock news).
- * Writes kv keys: news:global, news:cyber
+ * Shared RSS/Atom helpers for the global + cyber feed pollers.
+ * (Previously inlined in pollers/news.php, which was split into global.php and
+ * cyber.php so each panel can have its own source list and refresh interval.)
  */
-
-const GLOBAL_FEEDS = [
-    ['NPR Top News',  'https://feeds.npr.org/1001/rss.xml'],
-    ['The Guardian',  'https://www.theguardian.com/world/rss'],
-    ['BBC World',     'http://feeds.bbci.co.uk/news/world/rss.xml'],
-    ['White House',   'https://www.whitehouse.gov/feed/'],
-    ['Politico',      'https://rss.politico.com/politics-news.xml'],
-    ['MarketWatch',   'https://feeds.marketwatch.com/marketwatch/topstories/'],
-    ['Yahoo Finance', 'https://finance.yahoo.com/news/rssindex'],
-    ['WSJ Markets',   'https://feeds.content.dowjones.io/public/rss/mw_marketpulse'],
-];
-
-const CYBER_FEEDS = [
-    ['Krebs on Security', 'https://krebsonsecurity.com/feed/'],
-    ['Bleeping Computer', 'https://www.bleepingcomputer.com/feed/'],
-    ['Dark Reading',      'https://www.darkreading.com/rss.xml'],
-    ['SANS ISC',          'https://isc.sans.edu/rssfeed_full.xml'],
-    ['The Hacker News',   'https://feeds.feedburner.com/TheHackersNews'],
-    ['Defense One',       'https://www.defenseone.com/rss/all/'],
-    ['Breaking Defense',  'https://breakingdefense.com/feed/'],
-    ['CISA Alerts',       'https://www.cisa.gov/uscert/ncas/alerts.xml'],
-];
 
 const FINANCE_KEYWORDS = [
     'stock', 'market', 'earnings', 'fed', 'interest rate', 'inflation',
     'recession', 'gdp', 'jobs', 'unemployment', 's&p', 'nasdaq', 'dow',
     'treasury', 'bond', 'yield', 'ipo', 'merger', 'acquisition',
 ];
+
+/**
+ * Parse an admin-editable sources blob into [[name, url], ...].
+ * One source per line, "Name | URL" (a bare URL is allowed — it becomes its own
+ * label). Blank lines and lines starting with # are ignored. Falls back to the
+ * provided defaults when nothing valid is found, so a botched edit never empties
+ * a panel.
+ */
+function feed_parse_sources(string $raw, array $default): array {
+    $out = [];
+    foreach (preg_split('/\r\n|\r|\n/', $raw) as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#') continue;
+        if (str_contains($line, '|')) {
+            [$name, $url] = array_map('trim', explode('|', $line, 2));
+        } else {
+            $name = ''; $url = $line;
+        }
+        if ($url !== '' && filter_var($url, FILTER_VALIDATE_URL)) {
+            $label = $name !== '' ? $name : ((parse_url($url, PHP_URL_HOST) ?: $url));
+            $out[] = [$label, $url];
+        }
+    }
+    return $out ?: $default;
+}
 
 /** Parse an RSS 2.0 or Atom feed body into normalized article arrays. */
 function parse_feed_xml(string $body, string $source, string $category): array {
@@ -89,10 +92,12 @@ function parse_feed_xml(string $body, string $source, string $category): array {
     return $articles;
 }
 
-function news_is_fresh(array $a): bool {
-    $ts = strtotime($a['published_at'] ?? '');
-    if ($ts === false) return true;   // keep if date can't be parsed
-    return (time() - $ts) < NEWS_MAX_AGE_HOURS * 3600;
+/** Drop articles older than $maxAgeHours (keeps ones with unparseable dates). */
+function news_fresh_filter(array $articles, int $maxAgeHours): array {
+    return array_values(array_filter($articles, function ($a) use ($maxAgeHours) {
+        $ts = strtotime($a['published_at'] ?? '');
+        return $ts === false || (time() - $ts) < $maxAgeHours * 3600;
+    }));
 }
 
 function news_dedup_sort(array $articles): array {
@@ -117,39 +122,8 @@ function news_match_tickers(string $text, array $tickers): array {
     return $matched;
 }
 
-function poll_news(): string {
-    $tickers = array_map(fn($h) => strtoupper($h['ticker']), holdings_rows());
-    $espp = strtoupper(trim(setting('espp_ticker')));
-    if ($espp !== '' && !in_array($espp, $tickers, true)) $tickers[] = $espp;
-
-    $global = [];
-    foreach (GLOBAL_FEEDS as [$name, $url]) {
-        $body = http_get($url, 10);
-        if ($body !== null) $global = array_merge($global, parse_feed_xml($body, $name, 'global'));
-    }
-
-    $cyber = [];
-    foreach (CYBER_FEEDS as [$name, $url]) {
-        $body = http_get($url, 10);
-        if ($body !== null) $cyber = array_merge($cyber, parse_feed_xml($body, $name, 'cyber'));
-    }
-
-    foreach ($global as &$a) {
-        $text = strtolower($a['title'] . ' ' . ($a['summary'] ?? ''));
-        foreach (FINANCE_KEYWORDS as $kw) {
-            if (str_contains($text, $kw)) { $a['tags'][] = 'finance'; break; }
-        }
-        $a['tickers'] = news_match_tickers($a['title'] . ' ' . ($a['summary'] ?? ''), $tickers);
-    }
-    unset($a);
-
-    $globalOut = array_values(array_filter(news_dedup_sort($global), 'news_is_fresh'));
-    $cyberOut  = array_values(array_filter(news_dedup_sort($cyber),  'news_is_fresh'));
-
-    // TTL 3× poll interval so articles survive until next cycle + buffer
-    $ttl = POLL_INTERVALS['news'] * 3;
-    kv_set('news:global', array_slice($globalOut, 0, 60), $ttl);
-    kv_set('news:cyber',  array_slice($cyberOut,  0, 40), $ttl);
-
-    return 'News updated: ' . count($globalOut) . ' global, ' . count($cyberOut) . ' cyber';
+/** Effective refresh interval (seconds) for a poller, honoring the admin override. */
+function poller_interval(string $name, int $default): int {
+    $v = (int) setting("poll_interval_$name", (string)$default);
+    return $v >= 30 ? $v : $default;
 }

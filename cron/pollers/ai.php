@@ -7,33 +7,11 @@
  * Writes kv keys: ai:briefing, ai:global, ai:cyber, ai:portfolio
  */
 
-const AI_SYSTEM_PROMPTS = [
-    'daily_briefing' => <<<'PROMPT'
-You are a personal financial briefing writer. You receive market and news data. Write a short plain-text briefing of at most 3 sentences, using ONLY facts present in the data.
-
-Sentence 1 — Portfolio: whether the portfolio is up or down today, the leading and lagging tickers with their day percentages, and the total equity. Example shape: "Portfolio is up today — XYZ leads at 2.1%, ABC lags at -1.4%, with overall equity at $12,345.67."
-Sentence 2 — Markets: paraphrase the most important stock or market headline provided.
-Sentence 3 — World: paraphrase the most significant remaining headline provided.
-
-Hard rules:
-- Exactly 3 sentences. Stop immediately after the period of the third sentence.
-- NEVER invent tickers, prices, percentages, or news that are not in the data.
-- If the data for a sentence is missing, write fewer sentences. Do not explain why.
-- Output ONLY the briefing prose. Never mention these instructions, the data format, field names, JSON, or anything you skipped or omitted. No notes, no parentheticals about your process, no markdown.
-PROMPT,
-
-    'portfolio_analyst' => 'You are a concise portfolio analyst. Using only the data provided, write exactly 3 plain-text sentences separated by spaces. Do not use markdown, bullet points, headers, or JSON. Do not invent any numbers or tickers not present in the data. Sentence 1: state whether the portfolio is up or down today and the total equity value. Sentence 2: name the top gaining and top losing ticker with their day percentages. Sentence 3: state one risk or notable item from the news headlines. Output only the 3 sentences and nothing else.',
-
-    'global_digest' => 'You output ONLY this JSON structure, nothing else:
-{"digest":"string"}
-The "digest" is 1-2 sentences summarizing the single most important story from the provided headlines. Be specific — name the event, country, or company. Use plain text only. No markdown. Just the JSON.',
-
-    'cyber_digest' => 'You output ONLY this JSON structure, nothing else:
-{"digest":"string","items":[{"headline":"string","tags":["string"],"priority":"string"}]}
-The "digest" field is a 2-sentence summary of the most critical cybersecurity and defense news.
-The "items" array has up to 5 entries. Each tag is one of: cmmc, ai, dib, threat, policy, breach.
-Each priority is one of: high, medium, low. No markdown. No explanation. Just the JSON.',
-];
+// Default system prompts live in config.php (AI_SYSTEM_PROMPTS) so the admin page
+// can show/edit them too. Returns the admin override when set, else the default.
+function ai_prompt(string $settingKey, string $promptKey): string {
+    return setting_or($settingKey, AI_SYSTEM_PROMPTS[$promptKey]);
+}
 
 function ollama_chat(string $system, string $user, string $model, bool $json_mode, int $timeout = 120): ?string {
     $payload = [
@@ -44,7 +22,10 @@ function ollama_chat(string $system, string $user, string $model, bool $json_mod
         ],
         'stream'     => false,
         'keep_alive' => '30m',
-        'options'    => ['temperature' => 0.15, 'num_predict' => 1024],
+        'options'    => [
+            'temperature' => (float) setting_or('ai_temperature', (string)AI_TEMPERATURE),
+            'num_predict' => (int)   setting_or('ai_num_predict', (string)AI_NUM_PREDICT),
+        ],
     ];
     if ($json_mode) $payload['format'] = 'json';
     $resp = http_post_json(setting('ollama_host') . '/api/chat', $payload, $timeout);
@@ -81,7 +62,10 @@ function ai_sanitize_briefing(string $text, int $max_sentences = 4): string {
 function ai_is_fresh(?array $cached): bool {
     if (!$cached || empty($cached['generated_at'])) return false;
     $ts = strtotime($cached['generated_at']);
-    return $ts !== false && (time() - $ts) < AI_DIGEST_MIN_INTERVAL;
+    // Admin override is in minutes; default falls back to AI_DIGEST_MIN_INTERVAL.
+    $minSec = max(0, (int) setting_or('ai_min_interval_min',
+        (string) intdiv(AI_DIGEST_MIN_INTERVAL, 60))) * 60;
+    return $ts !== false && (time() - $ts) < $minSec;
 }
 
 function ai_finalize(string $key, array $result, string $model, int $ttl): void {
@@ -114,7 +98,7 @@ function poll_ai(): string {
     if ($newsGlobal && !ai_is_fresh(kv_get('ai:global'))) {
         $slim = array_map(fn($a) => ['title' => $a['title'], 'source' => $a['source']],
                           array_slice($newsGlobal, 0, 10));
-        $raw = ollama_chat(AI_SYSTEM_PROMPTS['global_digest'],
+        $raw = ollama_chat(ai_prompt('ai_prompt_global', 'global_digest'),
                            json_encode(['articles' => $slim]), $jsonModel, true);
         $parsed = $raw !== null ? json_decode(ai_strip_code_fences($raw), true) : null;
         if (is_array($parsed)) {
@@ -128,7 +112,7 @@ function poll_ai(): string {
     if ($newsCyber && !ai_is_fresh(kv_get('ai:cyber'))) {
         $slim = array_map(fn($a) => ['title' => $a['title'], 'source' => $a['source']],
                           array_slice($newsCyber, 0, 10));
-        $raw = ollama_chat(AI_SYSTEM_PROMPTS['cyber_digest'],
+        $raw = ollama_chat(ai_prompt('ai_prompt_cyber', 'cyber_digest'),
                            json_encode(['articles' => $slim]), $jsonModel, true);
         $parsed = $raw !== null ? json_decode(ai_strip_code_fences($raw), true) : null;
         if (is_array($parsed)) {
@@ -155,7 +139,7 @@ function poll_ai(): string {
             'finance_and_macro_news'=> ai_headlines(array_values(array_filter(
                 $newsGlobal ?? [], fn($a) => in_array('finance', $a['tags'] ?? [], true))), 10),
         ]);
-        $raw = ollama_chat(AI_SYSTEM_PROMPTS['portfolio_analyst'],
+        $raw = ollama_chat(ai_prompt('ai_prompt_portfolio', 'portfolio_analyst'),
                            "Portfolio data:\n$context", $model, false);
         if ($raw !== null && trim($raw) !== '') {
             ai_finalize('ai:portfolio',
@@ -188,7 +172,7 @@ function poll_ai(): string {
                 'location'  => $wx['location'] ?? null,
             ] : [],
         ];
-        $raw = ollama_chat(AI_SYSTEM_PROMPTS['daily_briefing'],
+        $raw = ollama_chat(ai_prompt('ai_prompt_briefing', 'daily_briefing'),
             "Generate my morning briefing from this context:\n" . json_encode($snapshot),
             $model, false);
         if ($raw !== null) {

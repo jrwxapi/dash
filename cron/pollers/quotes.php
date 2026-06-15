@@ -149,8 +149,38 @@ function poll_quotes(): string {
         }
     }
 
-    if (!$rows && $esppTicker === '') {
-        return 'No holdings configured — add positions in admin.php';
+    // ── Ticker tape extras ───────────────────────────────────────────────────
+    // Extra symbols configured on the admin page to scroll in the ticker tape
+    // alongside holdings. Quote-only (symbol / price / day change) — these are
+    // NOT part of the portfolio totals. Symbols already held are skipped so the
+    // tape doesn't show them twice.
+    $held = array_map(fn($h) => strtoupper($h['ticker']), $rows);
+    $extraSyms = preg_split('/[\s,]+/', strtoupper(trim(setting('ticker_extra_symbols', ''))), -1, PREG_SPLIT_NO_EMPTY);
+    $extra = [];
+    $seen = [];
+    foreach ($extraSyms as $sym) {
+        if (!preg_match('/^[A-Z0-9.\^\-=]{1,12}$/', $sym)) continue;   // allow ^GSPC, BTC-USD, EURUSD=X
+        if (in_array($sym, $held, true) || isset($seen[$sym])) continue;
+        $seen[$sym] = true;
+        $q = yahoo_quote($sym);
+        usleep(250000);
+        if ($q === null) continue;
+        $price = $q['price'];
+        $prev  = $q['prev_close'] ?: $price;
+        $extra[] = [
+            'ticker'               => $sym,
+            'name'                 => $q['name'],
+            'current_price'        => round($price, 2),
+            'percent_change_today' => $prev ? round(($price - $prev) / $prev * 100, 2) : 0.0,
+        ];
     }
-    return "Quotes updated: $fetched/" . count($rows) . " holdings$esppNote";
+    kv_set('ticker:extra', $extra, $ttl);
+
+    if (!$rows && $esppTicker === '') {
+        return $extra
+            ? 'Ticker extras updated: ' . count($extra) . ' (no holdings configured)'
+            : 'No holdings configured — add positions in admin.php';
+    }
+    return "Quotes updated: $fetched/" . count($rows) . " holdings"
+         . ($extra ? ', ' . count($extra) . ' ticker extras' : '') . $esppNote;
 }

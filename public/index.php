@@ -1,16 +1,30 @@
 <?php
 require_once __DIR__ . '/../includes/db.php';
+function feed_hl(string $key): int {
+    $v = setting("feed_{$key}_highlight_min", '');
+    return $v === '' ? FEED_HIGHLIGHT_MIN : max(0, (int)$v);
+}
 try {
     $displayName = setting('display_name', 'Operator');
     $weatherLoc  = setting('weather_location', 'New York, NY');
     $timeZone    = setting('timezone', 'America/New_York');
+    $feedHl      = ['global' => feed_hl('global'), 'cyber' => feed_hl('cyber'), 'truth' => feed_hl('truth')];
+    $tickerSpeed = max(5, min(400, (int) setting_or('ticker_speed', (string)TICKER_SPEED)));
 } catch (Throwable $e) {
     // DB not set up yet — page still renders (demo mode)
     $displayName = 'Operator';
     $weatherLoc  = 'New York, NY';
     $timeZone    = 'America/New_York';
+    $feedHl      = ['global' => 30, 'cyber' => 30, 'truth' => 30];
+    $tickerSpeed = 60;
 }
 function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
+// Config kebab (⋮) — opens the inline admin modal for the given section key(s).
+function kebab(string $key, string $title): string {
+    $t = e($title);
+    return '<button class="kebab" type="button" data-cfg="' . e($key) . '" data-cfg-title="' . $t
+         . '" title="Configure ' . $t . '" aria-label="Configure ' . $t . '">&#8942;</button>';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -18,7 +32,7 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Personal Intelligence Dashboard</title>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
 <div id="stage">
@@ -33,6 +47,7 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
             <div class="brand-title">Intelligence</div>
             <div class="brand-sub">Personal Command · <span id="brand-name"><?= e($displayName) ?></span></div>
           </div>
+          <?= kebab('general', 'General') ?>
         </div>
 
         <div class="header-spacer"></div>
@@ -63,6 +78,7 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
             <span class="ai-dot ai-dot--acc"></span>
             <span class="ai-card-label">Briefing</span>
             <span class="ai-card-sub" id="briefing-meta">ollama · —</span>
+            <?= kebab('ai', 'AI') ?>
           </div>
           <div class="ai-card-body" id="briefing-text">Waiting for data…</div>
         </div>
@@ -89,6 +105,7 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
               <span class="tag">Portfolio</span>
               <span class="spacer"></span>
               <span class="hint" id="pf-updated">UPD —</span>
+              <?= kebab('portfolio,ticker', 'Portfolio') ?>
             </div>
             <div class="panel-body">
               <div class="pf-summary">
@@ -151,6 +168,7 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
               <span class="tag">Global Feed</span>
               <span class="spacer"></span>
               <span class="hint">Geopolitics · Markets</span>
+              <?= kebab('global', 'Global Feed') ?>
             </div>
             <div class="panel-body">
               <div class="news-scroll" id="global-scroll">
@@ -168,6 +186,7 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
               <span class="tag">POTUS · Truth Social</span>
               <span class="spacer"></span>
               <span class="hint">@realDonaldTrump</span>
+              <?= kebab('truth', 'POTUS Feed') ?>
             </div>
             <div class="panel-body">
               <div class="news-scroll" id="truth-scroll">
@@ -181,6 +200,7 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
               <span class="tag">Cyber · DIB · AI</span>
               <span class="spacer"></span>
               <span class="hint">AI-Prioritized</span>
+              <?= kebab('cyber', 'Cyber Feed') ?>
             </div>
             <div class="panel-body">
               <div class="cyber-digest-note" id="cyber-digest-note" style="display:none"></div>
@@ -199,6 +219,7 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
               <span class="tag">Weather</span>
               <span class="spacer"></span>
               <span class="hint">7-Day</span>
+              <?= kebab('weather', 'Weather') ?>
             </div>
             <div class="panel-body">
               <div class="wx-current">
@@ -223,6 +244,7 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
               <span class="tag">ESPP</span>
               <span class="spacer"></span>
               <span class="hint">Yahoo Finance</span>
+              <?= kebab('espp', 'ESPP') ?>
             </div>
             <div class="panel-body">
               <div class="espp" id="espp-body"></div>
@@ -245,12 +267,27 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
   </div>
 </div>
 
-<script>window.DASH_TZ = <?= json_encode($timeZone) ?>;</script>
+<!-- ============ CONFIG MODAL (opened by the ⋮ kebabs) ============ -->
+<div id="cfg-overlay" class="cfg-overlay" hidden>
+  <div class="cfg-modal" role="dialog" aria-modal="true" aria-labelledby="cfg-title">
+    <div class="cfg-bar">
+      <span class="cfg-title" id="cfg-title">Configure</span>
+      <button class="cfg-close" type="button" aria-label="Close">&#10005;</button>
+    </div>
+    <iframe class="cfg-frame" id="cfg-frame" title="Configuration" src="about:blank"></iframe>
+  </div>
+</div>
+
+<script>
+  window.DASH_TZ = <?= json_encode($timeZone) ?>;
+  window.DASH_FEED_HL = <?= json_encode($feedHl) ?>;  /* new-item highlight window, minutes, per feed */
+  window.DASH_TICKER  = { speed: <?= (int)$tickerSpeed ?> };  /* ticker tape scroll speed, px/sec */
+</script>
 <script src="js/mock-data.js?v=1"></script>
 <script src="js/format.js?v=1"></script>
 <script src="js/api.js?v=1"></script>
 <script src="js/autoscroll.js?v=1"></script>
-<script src="js/panels.js?v=1"></script>
-<script src="js/main.js?v=2"></script>
+<script src="js/panels.js?v=4"></script>
+<script src="js/main.js?v=6"></script>
 </body>
 </html>

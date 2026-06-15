@@ -27,8 +27,13 @@ if ($forced !== null && !isset(POLL_INTERVALS[$forced])) {
 
 kv_purge_expired();
 
-foreach (POLL_INTERVALS as $name => $interval) {
+foreach (POLL_INTERVALS as $name => $default) {
     if ($forced !== null && $name !== $forced) continue;
+
+    // Admin can override any poller's cadence via the 'poll_interval_<name>'
+    // setting; fall back to the config.php default for blank/too-small values.
+    $interval = (int) setting("poll_interval_$name", (string)$default);
+    if ($interval < 30) $interval = $default;
 
     $meta = kv_get("poll:last:$name");
     $due  = $forced !== null || !$meta || (time() - ($meta['ran_at'] ?? 0)) >= $interval;

@@ -53,6 +53,14 @@ function setting(string $key, string $default = ''): string {
     return $row !== false ? $row['value'] : $default;
 }
 
+// Like setting(), but treats a stored empty string the same as "unset" and
+// returns $default. Lets an admin field be cleared to revert to its default,
+// and keeps numeric reads like (int)setting(...) from collapsing "" to 0.
+function setting_or(string $key, string $default): string {
+    $v = setting($key, '');
+    return $v === '' ? $default : $v;
+}
+
 function set_setting(string $key, string $value): void {
     $st = db()->prepare(
         'INSERT INTO settings (key, value) VALUES (:k, :v)

@@ -34,16 +34,15 @@
     const now = new Date();
     const tParts = now.toLocaleString('en-US', {
       timeZone: TZ,
-      hour: 'numeric', minute: '2-digit', second: '2-digit',
+      hour: 'numeric', minute: '2-digit',
       hour12: true,
-    }).match(/(\d+):(\d+):(\d+)\s*(AM|PM)/i);
+    }).match(/(\d+):(\d+)\s*(AM|PM)/i);
     const hh = tParts ? tParts[1] : '—';
     const mm = tParts ? tParts[2] : '00';
-    const ss = tParts ? tParts[3] : '00';
-    const ap = tParts ? tParts[4] : '';
+    const ap = tParts ? tParts[3] : '';
     const abbr = tzAbbr(now);
     document.getElementById('clock').innerHTML =
-      hh + ':' + mm + '<span class="sec">:' + ss + '</span> ' +
+      hh + ':' + mm + ' ' +
       '<span style="font-size:14px;color:var(--tx-3);font-weight:500">' + ap + ' ' + abbr + '</span>';
     document.getElementById('date-val').textContent =
       now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: TZ });
@@ -174,6 +173,7 @@
     'portfolio:history':  () => Panels.spark(),
     'portfolio:movers':   () => Panels.mover(),
     'portfolio:holdings': () => { Panels.holdings(); Panels.ticker(); },
+    'ticker:extra':       () => Panels.ticker(),
     'espp:holdings':      () => Panels.espp(),
     'news:global':        () => { Panels.global(); },
     'ai:global':          () => { prog('global-progress', false); Panels.aiSummaryGlobal(); },
@@ -186,20 +186,22 @@
   Object.entries(map).forEach(([k, fn]) => API.on(k, () => { try { fn(); } catch (e) { console.error(k, e); } }));
 
   /* ---------- Init auto-scroll regions ---------- */
-  AutoScroll.initVertical('holdings', '#holdings-scroll', '#holdings-track', 16);
-  AutoScroll.initVertical('global',   '#global-scroll',   '#global-track',   20);
-  AutoScroll.initVertical('cyber',    '#cyber-scroll',    '#cyber-track',    16);
-  AutoScroll.initVertical('truth',    '#truth-scroll',    '#truth-track',    16);
-  AutoScroll.initTicker('#ticker-viewport', '#ticker-track', 60);
+  // Only the ticker tape auto-scrolls now; the Portfolio holdings list and the
+  // Global / Cyber / POTUS feeds are all user-scrolled (see panels.js +
+  // .holdings-scroll / .news-scroll in styles.css).
+  AutoScroll.initTicker('#ticker-viewport', '#ticker-track', (window.DASH_TICKER && window.DASH_TICKER.speed) || 60);
 
   // recompute scroll metrics after fonts/layout settle
   function recompute() {
-    ['holdings', 'global', 'cyber', 'truth'].forEach(n => AutoScroll.refresh(n));
     AutoScroll.refreshTicker();
   }
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => setTimeout(recompute, 50));
   setTimeout(recompute, 400);
   setTimeout(recompute, 1500);
+
+  /* ---------- Fade new-item highlights as they age out ---------- */
+  // Re-evaluate every 20s so highlights expire on time even between data polls.
+  setInterval(function () { try { Panels.reHighlight(); } catch (e) {} }, 20000);
 
   /* ---------- Briefing offline note ---------- */
   // AI digests are generated server-side by cron/pollers/ai.php and arrive via
@@ -213,6 +215,60 @@
     if (metaEl) metaEl.textContent = 'ollama · offline';
     if (!API.get('ai:global')) prog('global-progress', false);
   }, 8000);
+
+  /* ---------- Inline config modal (⋮ kebabs) ---------- */
+  // Each kebab opens admin.php?only=<section> in an iframe centered on screen.
+  // The embedded admin posts messages back: 'height' (size the frame), 'saved'
+  // (a settings save → close + reload so new settings/data take effect), 'dirty'
+  // (holdings/digests changed → keep open, reload when the user closes it).
+  (function () {
+    var overlay = document.getElementById('cfg-overlay');
+    var frame   = document.getElementById('cfg-frame');
+    var titleEl = document.getElementById('cfg-title');
+    if (!overlay || !frame) return;
+    var dirty = false;
+
+    function openCfg(key, title) {
+      titleEl.textContent = title || 'Configure';
+      dirty = false;
+      frame.style.height = '340px';
+      frame.src = 'admin.php?only=' + encodeURIComponent(key);
+      overlay.hidden = false;
+    }
+    function closeCfg() {
+      if (overlay.hidden) return;
+      overlay.hidden = true;
+      var doReload = dirty;
+      dirty = false;
+      // Detach the iframe (it may hold a POST navigation from a save) to about:blank
+      // first, so reloading the dashboard doesn't trigger a "resend form data?" prompt.
+      frame.src = 'about:blank';
+      if (doReload) setTimeout(function () { location.reload(); }, 150);
+    }
+
+    document.querySelectorAll('.kebab').forEach(function (b) {
+      b.addEventListener('click', function () {
+        openCfg(b.getAttribute('data-cfg'), b.getAttribute('data-cfg-title'));
+      });
+    });
+    overlay.querySelector('.cfg-close').addEventListener('click', closeCfg);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeCfg(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !overlay.hidden) closeCfg();
+    });
+    window.addEventListener('message', function (e) {
+      var d = e.data;
+      if (!d || d.type !== 'dash-config') return;
+      if (d.action === 'height') {
+        var max = Math.round(window.innerHeight * 0.8);
+        frame.style.height = Math.min(Math.max(120, d.value || 340), max) + 'px';
+      } else if (d.action === 'saved') {
+        dirty = true; closeCfg();        // Save closes the modal + reloads
+      } else if (d.action === 'dirty') {
+        dirty = true;                    // changed but keep open (e.g. holdings)
+      }
+    });
+  })();
 
   /* ---------- Boot the API ---------- */
   API.boot();

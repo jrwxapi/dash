@@ -6,6 +6,56 @@
   const $ = (id) => document.getElementById(id);
   const P = {};
 
+  /* ---------------- MANUAL-SCROLL FEEDS + NEW-ITEM HIGHLIGHT ----------------
+     Global / Cyber / POTUS are user-scrolled (scrollbars in styles.css) rather
+     than auto-scrolled. Each item carries data-ts (published_at); items newer
+     than the per-feed highlight window get .is-new, which fades on a timer
+     (main.js) and re-applies on every render. Windows come from the admin page
+     via window.DASH_FEED_HL (minutes). */
+  const FEED_HL = window.DASH_FEED_HL || { global: 30, cyber: 30, truth: 30 };
+  const FEED_REGIONS = [
+    { scroll: 'global-scroll', track: 'global-track', key: 'global' },
+    { scroll: 'cyber-scroll',  track: 'cyber-track',  key: 'cyber' },
+    { scroll: 'truth-scroll',  track: 'truth-track',  key: 'truth' },
+  ];
+
+  function _applyHighlight(trackId, key) {
+    const track = $(trackId);
+    if (!track) return;
+    const winMs = (FEED_HL[key] || 0) * 60000;
+    const now = Date.now();
+    track.querySelectorAll('[data-ts]').forEach((el) => {
+      const ts = Date.parse(el.getAttribute('data-ts'));
+      const isNew = winMs > 0 && !isNaN(ts) && (now - ts) < winMs;
+      el.classList.toggle('is-new', isNew);
+    });
+  }
+
+  // Swap a feed's content while preserving the reader's manual scroll position,
+  // then (re)apply the new-item highlight.
+  function _renderFeed(scrollId, trackId, key, html) {
+    const sc = $(scrollId);
+    const top = sc ? sc.scrollTop : 0;
+    $(trackId).innerHTML = html;
+    if (sc) sc.scrollTop = top;
+    _applyHighlight(trackId, key);
+  }
+
+  // Re-evaluate highlights without a data change, so they fade as items age out.
+  P.reHighlight = function () {
+    FEED_REGIONS.forEach((r) => _applyHighlight(r.track, r.key));
+  };
+
+  // Open/close a feed card. Renders as an <a> link to the source when the item
+  // has a url (opens in a new tab), otherwise a plain <div>. cls = extra
+  // classes; ts = published_at, used by the new-item highlight.
+  function _cardOpen(cls, url, ts) {
+    return (url ? '<a' : '<div') + ' class="' + cls + '"' +
+      (url ? ' href="' + F.esc(url) + '" target="_blank" rel="noopener noreferrer"' : '') +
+      ' data-ts="' + F.esc(ts) + '">';
+  }
+  function _cardClose(url) { return url ? '</a>' : '</div>'; }
+
   /* ---------------- SHARED: rich text parser ---------------- */
   function richText(text) {
     let s = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -265,11 +315,12 @@
         '<span class="sub ' + tc + '">' + F.usdSigned(h.total_return_dollar, 0) + '</span></div>' +
         '</div>';
     };
-    // duplicate for seamless auto-scroll loop
-    const html = hs.map(rowHTML).join('');
-    const track = $('holdings-track');
-    track.innerHTML = html + html;
-    window.AutoScroll && window.AutoScroll.refresh('holdings');
+    // User-scrolled list — render once, preserving the reader's scroll position
+    // across data refreshes.
+    const sc = $('holdings-scroll');
+    const top = sc ? sc.scrollTop : 0;
+    $('holdings-track').innerHTML = hs.map(rowHTML).join('');
+    if (sc) sc.scrollTop = top;
   };
 
   /* ---------------- GLOBAL NEWS ---------------- */
@@ -286,18 +337,17 @@
       const senti = a.sentiment ? '<span class="senti ' + a.sentiment + '">' +
         (a.sentiment === 'positive' ? '\u25B2' : a.sentiment === 'negative' ? '\u25BC' : '\u25CF') +
         ' ' + (a.sentiment_score != null ? (a.sentiment_score > 0 ? '+' : '') + a.sentiment_score.toFixed(2) : a.sentiment) + '</span>' : '';
-      return '<div class="nart' + (fin ? ' fin' : '') + '" style="position:relative">' +
+      const url = a.url || '';
+      return _cardOpen('nart' + (fin ? ' fin' : ''), url, a.published_at) +
         (fin ? '<div class="ribbon"></div>' : '') +
         '<div class="top"><span class="src">' + F.esc(a.source) + '</span>' +
         (tk || senti ? '<span style="display:inline-flex;gap:6px;align-items:center">' + tk + senti + '</span>' : '') +
         '<span class="time">' + F.ago(a.published_at) + '</span></div>' +
         '<div class="ttl">' + F.esc(a.title) + '</div>' +
         (a.summary ? '<div class="sum">' + F.esc(a.summary) + '</div>' : '') +
-        '</div>';
+        _cardClose(url);
     };
-    const html = arts.map(artHTML).join('');
-    $('global-track').innerHTML = html + html;
-    window.AutoScroll && window.AutoScroll.refresh('global');
+    _renderFeed('global-scroll', 'global-track', 'global', arts.map(artHTML).join(''));
   };
 
   /* ---------------- CYBER / DIB DIGEST ---------------- */
@@ -330,16 +380,15 @@
       // Try to match AI tags by headline prefix
       const key = title.toLowerCase().slice(0, 40);
       const aiTags = aiTagMap[key] || a.tags || [];
-      return '<div class="cyber-art">' +
+      const url = a.url || '';
+      return _cardOpen('cyber-art', url, a.published_at) +
         '<div class="c-body"><div class="c-ttl">' + F.esc(title) + '</div>' +
         '<div class="c-meta"><span class="c-src">' + F.esc(a.source || '') + '</span>' +
         '<span class="c-src" style="color:var(--tx-4)">\u00b7 ' + F.ago(a.published_at) + '</span>' +
-        tagHTML(aiTags) + '</div></div></div>';
+        tagHTML(aiTags) + '</div></div>' + _cardClose(url);
     };
 
-    const html = arts.map(artHTML).join('');
-    $('cyber-track').innerHTML = html + html;
-    window.AutoScroll && window.AutoScroll.refresh('cyber');
+    _renderFeed('cyber-scroll', 'cyber-track', 'cyber', arts.map(artHTML).join(''));
   };
 
   /* ---------------- POTUS / TRUTH SOCIAL ---------------- */
@@ -350,16 +399,15 @@
     const postHTML = (p) => {
       const imgs = (p.images || []).slice(0, 2).map(u =>
         '<img src="' + F.esc(u) + '" loading="lazy" alt="" onerror="this.style.display=\'none\'">').join('');
-      return '<div class="nart">' +
+      const url = p.url || '';
+      return _cardOpen('nart', url, p.published_at) +
         '<div class="top"><span class="src">' + (p.is_retruth ? 'ReTruth' : 'Truth') + '</span>' +
         '<span class="time">' + F.ago(p.published_at) + '</span></div>' +
         (p.text ? '<div class="truth-txt">' + F.esc(p.text) + '</div>' : '') +
         (imgs ? '<div class="truth-imgs">' + imgs + '</div>' : '') +
-        '</div>';
+        _cardClose(url);
     };
-    const html = posts.map(postHTML).join('');
-    track.innerHTML = html + html;
-    window.AutoScroll && window.AutoScroll.refresh('truth');
+    _renderFeed('truth-scroll', 'truth-track', 'truth', posts.map(postHTML).join(''));
   };
 
   /* ---------------- WEATHER ---------------- */
@@ -463,8 +511,9 @@
 
   /* ---------------- TICKER TAPE ---------------- */
   P.ticker = function () {
-    const hs = API.get('portfolio:holdings');
-    if (!hs) return;
+    // Holdings plus any admin-configured extra symbols (ticker:extra).
+    const items = (API.get('portfolio:holdings') || []).concat(API.get('ticker:extra') || []);
+    if (!items.length) return;
     const itemHTML = (h) => {
       const dir = h.percent_change_today >= 0 ? 'up' : 'down';
       return '<div class="tk-item"><span class="tk-sym">' + F.esc(h.ticker) + '</span>' +
@@ -472,7 +521,7 @@
         '<span class="tk-arrow ' + dir + '">' + (dir === 'up' ? '\u25B2' : '\u25BC') + '</span>' +
         '<span class="tk-chg ' + dir + '">' + F.pct(h.percent_change_today) + '</span></div>';
     };
-    const html = hs.map(itemHTML).join('');
+    const html = items.map(itemHTML).join('');
     $('ticker-track').innerHTML = html + html + html;
     window.AutoScroll && window.AutoScroll.refreshTicker();
   };

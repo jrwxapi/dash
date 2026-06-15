@@ -16,6 +16,7 @@ const STATE_CHANNELS = [
     'portfolio:holdings',
     'portfolio:movers',
     'portfolio:history',
+    'ticker:extra',
     'espp:holdings',
     'news:global',
     'news:cyber',
