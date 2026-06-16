@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- dark rounded tile with amber edge (mirrors .brand-mark) -->
+  <rect x="3" y="3" width="58" height="58" rx="13"
+        fill="#15171c" stroke="#efb85d" stroke-opacity="0.55" stroke-width="2"/>
+  <!-- inner ring (mirrors .brand-mark .ring) -->
+  <circle cx="32" cy="32" r="20" fill="none"
+          stroke="#efb85d" stroke-opacity="0.42" stroke-width="2"/>
+  <!-- glowing center dot (mirrors .brand-mark::after) -->
+  <circle cx="32" cy="32" r="9" fill="#efb85d" filter="url(#glow)"/>
+</svg>

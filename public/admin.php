@@ -212,6 +212,8 @@ function ago(?int $ts): string {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard Admin</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="any">
 <style>
   :root { --bg:#0a0e14; --panel:#10161f; --border:#1d2735; --tx:#d7e0ea; --tx-2:#8b99a8;
           --acc:#4aa8ff; --gain:#27c281; --loss:#f2545b; }
