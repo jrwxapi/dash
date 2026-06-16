@@ -174,6 +174,7 @@
     'portfolio:movers':   () => Panels.mover(),
     'portfolio:holdings': () => { Panels.holdings(); Panels.ticker(); },
     'ticker:extra':       () => Panels.ticker(),
+    'market:indices':     () => Panels.indices(),
     'espp:holdings':      () => Panels.espp(),
     'news:global':        () => { Panels.global(); },
     'ai:global':          () => { prog('global-progress', false); Panels.aiSummaryGlobal(); },

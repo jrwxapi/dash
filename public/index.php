@@ -32,7 +32,7 @@ function kebab(string $key, string $title): string {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Personal Intelligence Dashboard</title>
-<link rel="stylesheet" href="styles.css?v=5">
+<link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
 <div id="stage">
@@ -108,6 +108,7 @@ function kebab(string $key, string $title): string {
               <?= kebab('portfolio,ticker', 'Portfolio') ?>
             </div>
             <div class="panel-body">
+              <div class="mkt-indices" id="mkt-indices"></div>
               <div class="pf-summary">
                 <div class="pf-equity-row">
                   <div class="pf-equity">
@@ -287,7 +288,7 @@ function kebab(string $key, string $title): string {
 <script src="js/format.js?v=1"></script>
 <script src="js/api.js?v=1"></script>
 <script src="js/autoscroll.js?v=1"></script>
-<script src="js/panels.js?v=5"></script>
-<script src="js/main.js?v=7"></script>
+<script src="js/panels.js?v=6"></script>
+<script src="js/main.js?v=8"></script>
 </body>
 </html>

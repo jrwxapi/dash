@@ -176,6 +176,32 @@ function poll_quotes(): string {
     }
     kv_set('ticker:extra', $extra, $ttl);
 
+    // ── Market indices ───────────────────────────────────────────────────────
+    // Dow, Nasdaq Composite and S&P 500 shown as a strip under the Portfolio
+    // title. Cash indices (not futures); quote-only, not part of any total.
+    $indexDefs = [
+        ['^DJI',  'DOW JONES'],
+        ['^IXIC', 'NASDAQ'],
+        ['^GSPC', 'S&P 500'],
+    ];
+    $indices = [];
+    foreach ($indexDefs as [$sym, $label]) {
+        $q = yahoo_quote($sym);
+        usleep(250000);
+        if ($q === null) continue;
+        $price = $q['price'];
+        $prev  = $q['prev_close'] ?: $price;
+        $indices[] = [
+            'symbol'         => $sym,
+            'label'          => $label,
+            'price'          => round($price, 2),
+            'change'         => round($price - $prev, 2),
+            'percent_change' => $prev ? round(($price - $prev) / $prev * 100, 2) : 0.0,
+            'direction'      => $price >= $prev ? 'up' : 'down',
+        ];
+    }
+    if ($indices) kv_set('market:indices', $indices, $ttl);
+
     if (!$rows && $esppTicker === '') {
         return $extra
             ? 'Ticker extras updated: ' . count($extra) . ' (no holdings configured)'

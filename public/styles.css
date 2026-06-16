@@ -323,6 +323,27 @@ html, body {
 /* ============================================================
    PORTFOLIO
    ============================================================ */
+/* Market indices strip (DOW / NASDAQ / S&P) under the Portfolio title */
+.mkt-indices { display: flex; flex: none; border-bottom: 1px solid var(--border); }
+.mkt-indices:empty { display: none; }
+.mkt-idx {
+  flex: 1; min-width: 0; padding: 9px 12px 10px;
+  border-left: 1px solid oklch(1 0 0 / 0.10);
+  position: relative; overflow: hidden;
+}
+.mkt-idx:first-child { border-left: none; }
+.mkt-idx.up   { background: linear-gradient(160deg, oklch(0.46 0.12 152), oklch(0.30 0.08 152)); }
+.mkt-idx.down { background: linear-gradient(160deg, oklch(0.46 0.15 25),  oklch(0.30 0.10 25)); }
+.mi-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  color: oklch(1 0 0 / 0.82); text-transform: uppercase; white-space: nowrap;
+}
+.mi-price {
+  font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums;
+  font-size: 22px; font-weight: 800; line-height: 1.15; color: #fff; margin-top: 2px;
+}
+.mi-chg { font-size: 12px; font-weight: 600; color: oklch(1 0 0 / 0.80); margin-top: 1px; }
+
 .pf-summary { padding: 15px 16px 13px; display: flex; flex-direction: column; gap: 12px; flex: none; }
 .pf-equity-row { display: flex; align-items: flex-end; justify-content: space-between; }
 .pf-equity .lbl {

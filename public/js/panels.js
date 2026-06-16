@@ -133,6 +133,23 @@
     el.innerHTML = txt;
   };
 
+  /* ---------------- MARKET INDICES (DOW / NASDAQ / S&P) ---------------- */
+  P.indices = function () {
+    const idx = API.get('market:indices');
+    const wrap = $('mkt-indices');
+    if (!wrap || !idx || !idx.length) return;
+    const num = (n) => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const chg = (n) => (n >= 0 ? '+' : '−') + num(Math.abs(n));
+    wrap.innerHTML = idx.map((i) => {
+      const dir = i.direction === 'up' ? 'up' : 'down';
+      return '<div class="mkt-idx ' + dir + '">' +
+        '<div class="mi-label">' + F.esc(i.label) + '</div>' +
+        '<div class="mi-price">' + num(i.price) + '</div>' +
+        '<div class="mi-chg">' + chg(i.change) + ' (' + F.pct(i.percent_change) + ')</div>' +
+        '</div>';
+    }).join('');
+  };
+
   /* ---------------- PORTFOLIO SUMMARY ---------------- */
   P.summary = function () {
     const s = API.get('portfolio:summary');
