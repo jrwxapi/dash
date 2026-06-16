@@ -21,6 +21,7 @@ const STATE_CHANNELS = [
     'news:global',
     'news:cyber',
     'truth:posts',
+    'x:posts',
     'weather:current',
     'ai:briefing',
     'ai:global',

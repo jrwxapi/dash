@@ -391,17 +391,27 @@
     _renderFeed('cyber-scroll', 'cyber-track', 'cyber', arts.map(artHTML).join(''));
   };
 
-  /* ---------------- POTUS / TRUTH SOCIAL ---------------- */
+  /* ---------------- INTERESTING PEOPLE (X + Truth Social) ---------------- */
   P.truth = function () {
-    const posts = API.get('truth:posts');
     const track = $('truth-track');
-    if (!posts || !posts.length || !track) return;
+    if (!track) return;
+    // Merge X posts and Truth Social mirror posts into one newest-first stream.
+    const posts = []
+      .concat(API.get('x:posts') || [])
+      .concat(API.get('truth:posts') || [])
+      .sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)));
+    if (!posts.length) return;
+    const srcLabel = (p) => {
+      if (p.author) return F.esc(p.author);               // X handle, e.g. @handle
+      return p.is_retruth ? 'ReTruth' : 'Truth';
+    };
     const postHTML = (p) => {
       const imgs = (p.images || []).slice(0, 2).map(u =>
         '<img src="' + F.esc(u) + '" loading="lazy" alt="" onerror="this.style.display=\'none\'">').join('');
       const url = p.url || '';
+      const rt = p.is_retruth ? '<span class="rt">RT</span>' : '';
       return _cardOpen('nart', url, p.published_at) +
-        '<div class="top"><span class="src">' + (p.is_retruth ? 'ReTruth' : 'Truth') + '</span>' +
+        '<div class="top"><span class="src">' + srcLabel(p) + '</span>' + rt +
         '<span class="time">' + F.ago(p.published_at) + '</span></div>' +
         (p.text ? '<div class="truth-txt">' + F.esc(p.text) + '</div>' : '') +
         (imgs ? '<div class="truth-imgs">' + imgs + '</div>' : '') +

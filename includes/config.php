@@ -16,6 +16,7 @@ define('APP_NAME', 'Personal Intelligence Dashboard');
 define('POLL_INTERVALS', [
     'quotes'  => 300,    // Yahoo Finance quotes — 5 min
     'truth'   => 600,    // Truth Social mirror — 10 min
+    'x'       => 900,    // X / Twitter API — 15 min (rate-limit friendly)
     'weather' => 900,    // Open-Meteo — 15 min
     'global'  => 1800,   // Global RSS feeds — 30 min
     'cyber'   => 1800,   // Cyber/DIB RSS feeds — 30 min
@@ -26,6 +27,7 @@ define('POLL_INTERVALS', [
 // Defaults only — overridable per feed via the 'feed_*_max_age_h' settings.
 define('NEWS_MAX_AGE_HOURS', 48);
 define('TRUTH_MAX_AGE_HOURS', 24);
+define('X_MAX_AGE_HOURS', 48);
 
 // How long (minutes) a freshly published item stays highlighted in the feed
 // panels. Default only — overridable per feed via 'feed_*_highlight_min'.
@@ -39,6 +41,18 @@ define('TICKER_SPEED', 60);
 define('GLOBAL_MAX_ITEMS', 60);
 define('CYBER_MAX_ITEMS', 40);
 define('TRUTH_MAX_POSTS', 20);
+define('X_MAX_POSTS', 30);
+
+// X / Twitter API v2. The "Interesting People Posts" panel pulls the latest
+// tweets from the handles configured on the admin page (x_handles), authorized
+// with an OAuth2 App-Only Bearer Token (x_bearer_token). Reading other users'
+// timelines requires at least the paid Basic tier; the poller no-ops cleanly
+// when no token/handles are set. Posts are merged with truth:posts in the panel.
+define('X_API_BASE', 'https://api.twitter.com/2');
+// Tweets requested per handle per poll (X allows 5–100; keep low for rate limits).
+define('X_TWEETS_PER_HANDLE', 5);
+// Default handles (one "@handle" per line on the admin page). Empty = unconfigured.
+define('X_HANDLES_DEFAULT', '');
 
 // Default feed sources. Editable per feed on the admin page (one "Name | URL"
 // per line for the RSS lists). The pollers fall back to these when the

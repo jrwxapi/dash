@@ -183,10 +183,10 @@ function kebab(string $key, string $title): string {
           <div class="panel" style="flex:1">
             <div class="panel-h">
               <span class="tick potus"></span>
-              <span class="tag">POTUS · Truth Social</span>
+              <span class="tag">Interesting People Posts</span>
               <span class="spacer"></span>
-              <span class="hint">@realDonaldTrump</span>
-              <?= kebab('truth', 'POTUS Feed') ?>
+              <span class="hint">X &amp; Truth Social</span>
+              <?= kebab('x,truth', 'Interesting People') ?>
             </div>
             <div class="panel-body">
               <div class="news-scroll" id="truth-scroll">
@@ -287,7 +287,7 @@ function kebab(string $key, string $title): string {
 <script src="js/format.js?v=1"></script>
 <script src="js/api.js?v=1"></script>
 <script src="js/autoscroll.js?v=1"></script>
-<script src="js/panels.js?v=4"></script>
-<script src="js/main.js?v=6"></script>
+<script src="js/panels.js?v=5"></script>
+<script src="js/main.js?v=7"></script>
 </body>
 </html>

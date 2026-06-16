@@ -179,6 +179,7 @@
     'ai:global':          () => { prog('global-progress', false); Panels.aiSummaryGlobal(); },
     'news:cyber':         () => { Panels.cyber(); },
     'truth:posts':        () => { Panels.truth(); },
+    'x:posts':            () => { Panels.truth(); },
     'ai:cyber':           () => { prog('cyber-progress', false); Panels.cyber(); Panels.aiSummaryCyber(); },
     'weather:current':    () => { Panels.weather(); Panels.aiSummaryWeather(); },
     'ai:portfolio':       () => Panels.aiPortfolio(),

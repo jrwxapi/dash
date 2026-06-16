@@ -130,6 +130,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $saved = true;
             break;
 
+        case 'feed_x':
+            // Only overwrite the bearer token when a new value is submitted, so
+            // re-saving the form (which shows a masked placeholder) doesn't wipe it.
+            $tok = trim($_POST['bearer_token'] ?? '');
+            if ($tok !== '') set_setting('x_bearer_token', $tok);
+            set_setting('x_handles',     trim($_POST['handles'] ?? ''));
+            // Active-hours window (HH:MM, in the dashboard timezone). Blank = always on.
+            $hhmm = fn($v) => preg_match('/^\d{1,2}:\d{2}$/', trim($v ?? '')) ? trim($v) : '';
+            set_setting('x_active_start', $hhmm($_POST['active_start'] ?? ''));
+            set_setting('x_active_end',   $hhmm($_POST['active_end'] ?? ''));
+            set_setting('poll_interval_x', (string) max(60, (int)($_POST['interval'] ?? 900)));
+            set_setting('x_max',         (string) max(1,  (int)($_POST['max_items'] ?? X_MAX_POSTS)));
+            set_setting('x_max_age_h',   (string) max(1,  (int)($_POST['max_age_h'] ?? X_MAX_AGE_HOURS)));
+            set_setting('x_per_handle',  (string) max(5,  min(100, (int)($_POST['per_handle'] ?? X_TWEETS_PER_HANDLE))));
+            kv_del('x:userids');        // re-resolve handles on the next run
+            kv_del('poll:last:x');      // force a refresh on the next cron tick
+            $msg = 'X feed settings saved — refreshing within a minute.';
+            $saved = true;
+            break;
+
         case 'ai':
             set_setting('ollama_host',       rtrim(trim($_POST['ollama_host'] ?? ''), '/'));
             set_setting('ollama_model',      trim($_POST['ollama_model'] ?? 'phi3:mini'));
@@ -320,6 +340,38 @@ foreach ($rssFeeds as $f => [$title, $action, $defFeeds, $defMax, $defAge, $defI
   </form>
 </section>
 <?php endforeach; ?>
+
+<?php if (show_sec('x')): ?>
+<section>
+  <h2>Interesting People · X / Twitter</h2>
+  <form method="post">
+    <input type="hidden" name="action" value="feed_x">
+    <label>X API Bearer Token</label>
+    <input name="bearer_token" type="password" autocomplete="off"
+           placeholder="<?= setting('x_bearer_token', '') !== '' ? '•••••• (saved — leave blank to keep)' : 'paste OAuth2 App-Only Bearer Token' ?>">
+    <label>Handles (one @handle per line)</label>
+    <textarea name="handles" rows="5" placeholder="@realDonaldTrump&#10;@elonmusk"><?= e(setting_or('x_handles', X_HANDLES_DEFAULT)) ?></textarea>
+    <div class="row">
+      <div><label>Active from</label>
+        <input name="active_start" type="time" value="<?= e(setting('x_active_start', '')) ?>"></div>
+      <div><label>Active until</label>
+        <input name="active_end" type="time" value="<?= e(setting('x_active_end', '')) ?>"></div>
+    </div>
+    <div class="row">
+      <div><label>Refresh interval (seconds)</label>
+        <input name="interval" type="number" min="60" step="30" value="<?= e(setting_or('poll_interval_x', (string)POLL_INTERVALS['x'])) ?>"></div>
+      <div><label>Posts per handle</label>
+        <input name="per_handle" type="number" min="5" max="100" value="<?= e(setting_or('x_per_handle', (string)X_TWEETS_PER_HANDLE)) ?>"></div>
+      <div><label>Max posts kept</label>
+        <input name="max_items" type="number" min="1" value="<?= e(setting_or('x_max', (string)X_MAX_POSTS)) ?>"></div>
+      <div><label>Max post age (hours)</label>
+        <input name="max_age_h" type="number" min="1" value="<?= e(setting_or('x_max_age_h', (string)X_MAX_AGE_HOURS)) ?>"></div>
+    </div>
+    <p class="hint">Reading other users' timelines requires X's paid Basic tier or higher. Posts here are merged with the Truth Social feed below. Active hours use the dashboard timezone (<?= e(setting('timezone', 'America/New_York')) ?>) and pause polling outside the window — leave both blank to poll 24/7. Leave handles blank to disable.</p>
+    <button>Save</button>
+  </form>
+</section>
+<?php endif; ?>
 
 <?php if (show_sec('truth')): ?>
 <section>
