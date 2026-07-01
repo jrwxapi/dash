@@ -132,11 +132,6 @@ function kebab(string $key, string $title): string {
                 <div class="axis"><span id="pf-spark-lo">—</span><span>5-DAY ACCOUNT VALUE</span><span id="pf-spark-hi">—</span></div>
               </div>
 
-              <div class="mover-wrap">
-                <div class="mover-hero up" id="mover-hero"></div>
-                <div class="mover-pips" id="mover-pips"></div>
-              </div>
-
               <div class="holdings">
                 <div class="holdings-head">
                   <span>Position</span><span class="r">Equity</span><span class="r">Today</span><span class="r">Lifetime</span>

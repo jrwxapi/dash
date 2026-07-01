@@ -38,7 +38,11 @@ function poll_quotes(): string {
     foreach ($rows as $row) {
         $ticker = strtoupper($row['ticker']);
         $qty = (float)$row['quantity'];
-        $avg = (float)$row['avg_cost'];
+        // avg_cost is optional: a blank (NULL) or 0 cost basis means "unknown" —
+        // the position still counts toward equity/today but is left out of the
+        // lifetime return (so a $0 default can't inflate gains to 100%).
+        $hasCost = $row['avg_cost'] !== null && (float)$row['avg_cost'] > 0;
+        $avg = $hasCost ? (float)$row['avg_cost'] : null;
 
         $q = yahoo_quote($ticker);
         usleep(250000);   // be polite to Yahoo
@@ -51,18 +55,20 @@ function poll_quotes(): string {
         $price  = $q['price'];
         $prev   = $q['prev_close'] ?: $price;
         $equity = $price * $qty;
-        $cost   = $avg * $qty;
+        $cost   = $hasCost ? $avg * $qty : null;
         $holdings[] = [
             'ticker'               => $ticker,
             'name'                 => $row['name'] !== '' ? $row['name'] : $q['name'],
+            'section'              => $row['section'] ?? 'Ungrouped',
+            'section_order'        => $row['section'] !== null ? (int)$row['section_order'] : 9999,
             'quantity'             => $qty,
             'average_buy_price'    => $avg,
             'current_price'        => round($price, 2),
             'equity'               => round($equity, 2),
             'percent_change_today' => $prev ? round(($price - $prev) / $prev * 100, 2) : 0.0,
             'dollar_change_today'  => round(($price - $prev) * $qty, 2),
-            'total_return_dollar'  => round($equity - $cost, 2),
-            'total_return_percent' => $cost > 0 ? round(($equity - $cost) / $cost * 100, 2) : 0.0,
+            'total_return_dollar'  => $hasCost ? round($equity - $cost, 2) : null,
+            'total_return_percent' => $hasCost ? round(($equity - $cost) / $cost * 100, 2) : null,
             'updated_at'           => $now,
         ];
     }
@@ -72,18 +78,26 @@ function poll_quotes(): string {
     if ($holdings) {
         usort($holdings, fn($a, $b) => $b['equity'] <=> $a['equity']);
 
-        $equityTotal = array_sum(array_column($holdings, 'equity'));
-        $dayTotal    = array_sum(array_column($holdings, 'dollar_change_today'));
-        $retTotal    = array_sum(array_column($holdings, 'total_return_dollar'));
-        $costTotal   = $equityTotal - $retTotal;
-        $prevEquity  = $equityTotal - $dayTotal;
+        // Lifetime return only sums positions with a known cost basis; positions
+        // left without an avg cost still count toward equity and today's change.
+        $equityTotal = 0.0; $dayTotal = 0.0; $equityKnown = 0.0; $costKnown = 0.0;
+        foreach ($holdings as $h) {
+            $equityTotal += $h['equity'];
+            $dayTotal    += $h['dollar_change_today'];
+            if (($h['total_return_dollar'] ?? null) !== null) {
+                $equityKnown += $h['equity'];
+                $costKnown   += $h['equity'] - $h['total_return_dollar'];
+            }
+        }
+        $retTotal   = $equityKnown - $costKnown;
+        $prevEquity = $equityTotal - $dayTotal;
 
         $summary = [
             'total_equity'         => round($equityTotal, 2),
             'daily_change_dollar'  => round($dayTotal, 2),
             'daily_change_percent' => $prevEquity > 0 ? round($dayTotal / $prevEquity * 100, 2) : 0.0,
             'total_return_dollar'  => round($retTotal, 2),
-            'total_return_percent' => $costTotal > 0 ? round($retTotal / $costTotal * 100, 2) : 0.0,
+            'total_return_percent' => $costKnown > 0 ? round($retTotal / $costKnown * 100, 2) : 0.0,
             'updated_at'           => $now,
         ];
 

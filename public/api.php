@@ -14,7 +14,6 @@ header('Cache-Control: no-store');
 const STATE_CHANNELS = [
     'portfolio:summary',
     'portfolio:holdings',
-    'portfolio:movers',
     'portfolio:history',
     'ticker:extra',
     'market:indices',

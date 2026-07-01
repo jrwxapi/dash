@@ -14,6 +14,15 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT NOT NULL DEFAULT ''
 );
 
+-- Named, collapsible groupings for holdings (e.g. "Retirement", "Cyber bets").
+-- Managed in the admin page; a position with no section renders as "Ungrouped".
+CREATE TABLE IF NOT EXISTS portfolio_sections (
+    id         SERIAL PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Manual portfolio (replaces the Robinhood integration): enter positions in
 -- the admin page; quotes are fetched from Yahoo Finance by cron/pollers/quotes.php.
 CREATE TABLE IF NOT EXISTS holdings (
@@ -21,8 +30,16 @@ CREATE TABLE IF NOT EXISTS holdings (
     ticker   TEXT NOT NULL UNIQUE,
     name     TEXT NOT NULL DEFAULT '',
     quantity NUMERIC NOT NULL DEFAULT 0,
-    avg_cost NUMERIC NOT NULL DEFAULT 0
+    avg_cost NUMERIC
 );
+
+-- Idempotent migrations so re-running this file upgrades an existing DB:
+--   • section_id groups a holding (NULL → Ungrouped; section delete → NULL)
+--   • avg_cost becomes optional (NULL = unknown cost basis, distinct from 0)
+ALTER TABLE holdings ADD COLUMN IF NOT EXISTS section_id INTEGER
+    REFERENCES portfolio_sections(id) ON DELETE SET NULL;
+ALTER TABLE holdings ALTER COLUMN avg_cost DROP NOT NULL;
+ALTER TABLE holdings ALTER COLUMN avg_cost DROP DEFAULT;
 
 -- Account-value samples recorded each quotes poll; feeds the 5-day sparkline.
 CREATE TABLE IF NOT EXISTS equity_history (

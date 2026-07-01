@@ -77,5 +77,15 @@ function iso_now(): string {
 }
 
 function holdings_rows(): array {
-    return db()->query('SELECT ticker, name, quantity, avg_cost FROM holdings ORDER BY ticker')->fetchAll();
+    return db()->query(
+        'SELECT h.ticker, h.name, h.quantity, h.avg_cost, h.section_id,
+                s.name AS section, s.sort_order AS section_order
+         FROM holdings h
+         LEFT JOIN portfolio_sections s ON s.id = h.section_id
+         ORDER BY h.ticker'
+    )->fetchAll();
+}
+
+function sections_rows(): array {
+    return db()->query('SELECT id, name, sort_order FROM portfolio_sections ORDER BY sort_order, id')->fetchAll();
 }

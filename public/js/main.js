@@ -171,7 +171,6 @@
     'ai:briefing':        () => Panels.briefing(),
     'portfolio:summary':  () => Panels.summary(),
     'portfolio:history':  () => Panels.spark(),
-    'portfolio:movers':   () => Panels.mover(),
     'portfolio:holdings': () => { Panels.holdings(); Panels.ticker(); },
     'ticker:extra':       () => Panels.ticker(),
     'market:indices':     () => Panels.indices(),

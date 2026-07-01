@@ -94,7 +94,6 @@
   function seedMock() {
     setState('portfolio:summary',  MOCK.summary());
     setState('portfolio:holdings', MOCK.holdings());
-    setState('portfolio:movers',   MOCK.movers(10));
     setState('portfolio:history',  MOCK.history('week'));
     setState('espp:holdings',      MOCK.espp());
     setState('news:global',        MOCK.global());
@@ -112,7 +111,7 @@
     if (!_mockActive) return;
     var holdings = state['portfolio:holdings'];
     if (!holdings) return;
-    var dayDollarTotal = 0, equityTotal = 0, costTotal = 0;
+    var dayDollarTotal = 0, equityTotal = 0, equityKnown = 0, costKnown = 0;
     holdings.forEach(function (h) {
       var wiggle = (Math.random() - 0.48) * (h.current_price * 0.0016);
       h.current_price = +(h.current_price + wiggle).toFixed(2);
@@ -120,28 +119,31 @@
       var prevClose = h.current_price / (1 + h.percent_change_today / 100);
       h.percent_change_today = +(((h.current_price - prevClose) / prevClose) * 100 + (Math.random() - 0.48) * 0.05).toFixed(2);
       h.dollar_change_today = +((h.current_price - prevClose) * h.quantity).toFixed(2);
-      var cost = h.average_buy_price * h.quantity;
-      h.total_return_dollar = +(h.equity - cost).toFixed(2);
-      h.total_return_percent = +((h.total_return_dollar / cost) * 100).toFixed(2);
+      // avg cost is optional — blank/0 means unknown basis, so no lifetime return.
+      if (h.average_buy_price != null && h.average_buy_price > 0) {
+        var cost = h.average_buy_price * h.quantity;
+        h.total_return_dollar = +(h.equity - cost).toFixed(2);
+        h.total_return_percent = +((h.total_return_dollar / cost) * 100).toFixed(2);
+        equityKnown += h.equity; costKnown += cost;
+      } else {
+        h.total_return_dollar = null;
+        h.total_return_percent = null;
+      }
       h.updated_at = new Date().toISOString();
-      dayDollarTotal += h.dollar_change_today; equityTotal += h.equity; costTotal += cost;
+      dayDollarTotal += h.dollar_change_today; equityTotal += h.equity;
     });
     holdings.sort(function (a, b) { return b.equity - a.equity; });
 
     var summary = state['portfolio:summary'];
     if (summary) {
+      var retTotal = equityKnown - costKnown;
       summary.total_equity = +equityTotal.toFixed(2);
-      summary.total_return_dollar = +(equityTotal - costTotal).toFixed(2);
-      summary.total_return_percent = +(((equityTotal - costTotal) / costTotal) * 100).toFixed(2);
+      summary.total_return_dollar = +retTotal.toFixed(2);
+      summary.total_return_percent = costKnown > 0 ? +((retTotal / costKnown) * 100).toFixed(2) : 0;
       summary.daily_change_dollar = +dayDollarTotal.toFixed(2);
       summary.daily_change_percent = +((dayDollarTotal / (equityTotal - dayDollarTotal)) * 100).toFixed(2);
       summary.updated_at = new Date().toISOString();
     }
-    var movers = holdings.map(function (h) {
-      return { ticker: h.ticker, name: h.name, percent_change: h.percent_change_today, dollar_change: h.dollar_change_today, direction: h.percent_change_today >= 0 ? 'up' : 'down' };
-    }).sort(function (a, b) { return Math.abs(b.percent_change) - Math.abs(a.percent_change); });
-    setState('portfolio:movers', movers);
-
     var hist = state['portfolio:history'];
     if (hist && hist.equity_historicals) {
       hist.equity_historicals.push({ adjusted_close_equity: summary.total_equity, begins_at: new Date().toISOString() });
@@ -159,7 +161,6 @@
 
     emit('portfolio:holdings', holdings);
     emit('portfolio:summary', summary);
-    emit('portfolio:movers', movers);
     emit('portfolio:history', hist);
     emit('espp:holdings', espp);
   }

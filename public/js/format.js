@@ -21,12 +21,6 @@
       if (n == null) return '\u2014';
       return '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
     },
-    // big equity split into dollars + cents for type treatment
-    equityParts(n) {
-      const fixed = Number(n).toFixed(2);
-      const [d, c] = fixed.split('.');
-      return { dollars: '$' + Number(d).toLocaleString('en-US'), cents: '.' + c };
-    },
     ago(iso) {
       if (!iso) return '';
       const diff = (Date.now() - new Date(iso).getTime()) / 60000;

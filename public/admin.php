@@ -74,16 +74,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'holding_add':
             $ticker = strtoupper(trim($_POST['ticker'] ?? ''));
             if ($ticker !== '' && preg_match('/^[A-Z0-9.\-]{1,10}$/', $ticker)) {
+                // Avg cost is optional — blank stores NULL (unknown cost basis).
+                $rawCost = trim($_POST['avg_cost'] ?? '');
+                $avgCost = $rawCost === '' ? null : (float)$rawCost;
+                // Section: empty select value → NULL (Ungrouped).
+                $sid = (int)($_POST['section_id'] ?? 0);
+                $sectionId = $sid > 0 ? $sid : null;
                 db()->prepare(
-                    'INSERT INTO holdings (ticker, name, quantity, avg_cost)
-                     VALUES (:t, :n, :q, :c)
+                    'INSERT INTO holdings (ticker, name, quantity, avg_cost, section_id)
+                     VALUES (:t, :n, :q, :c, :s)
                      ON CONFLICT (ticker) DO UPDATE
-                     SET name = EXCLUDED.name, quantity = EXCLUDED.quantity, avg_cost = EXCLUDED.avg_cost'
+                     SET name = EXCLUDED.name, quantity = EXCLUDED.quantity,
+                         avg_cost = EXCLUDED.avg_cost, section_id = EXCLUDED.section_id'
                 )->execute([
                     ':t' => $ticker,
                     ':n' => trim($_POST['name'] ?? ''),
                     ':q' => (float)($_POST['quantity'] ?? 0),
-                    ':c' => (float)($_POST['avg_cost'] ?? 0),
+                    ':c' => $avgCost,
+                    ':s' => $sectionId,
                 ]);
                 kv_del('poll:last:quotes');
                 $msg = "Holding $ticker saved — quotes refresh within a minute.";
@@ -98,6 +106,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ->execute([':t' => strtoupper(trim($_POST['ticker'] ?? ''))]);
             kv_del('poll:last:quotes');
             $msg = 'Holding removed.';
+            $dirty = true;
+            break;
+
+        case 'section_add':
+            $sname = trim($_POST['section_name'] ?? '');
+            if ($sname !== '') {
+                // Append after existing sections; ignore a duplicate name.
+                db()->prepare(
+                    'INSERT INTO portfolio_sections (name, sort_order)
+                     VALUES (:n, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM portfolio_sections))
+                     ON CONFLICT (name) DO NOTHING'
+                )->execute([':n' => $sname]);
+                $msg = "Section \"$sname\" added.";
+                $dirty = true;
+            } else {
+                $msg = 'Section name required.';
+            }
+            break;
+
+        case 'section_rename':
+            $sid   = (int)($_POST['section_id'] ?? 0);
+            $sname = trim($_POST['section_name'] ?? '');
+            if ($sid > 0 && $sname !== '') {
+                db()->prepare('UPDATE portfolio_sections SET name = :n WHERE id = :i')
+                    ->execute([':n' => $sname, ':i' => $sid]);
+                kv_del('poll:last:quotes');   // refresh so the new name shows on the dashboard
+                $msg = 'Section renamed.';
+                $dirty = true;
+            } else {
+                $msg = 'Section name required.';
+            }
+            break;
+
+        case 'section_delete':
+            // ON DELETE SET NULL drops the section's positions back to Ungrouped.
+            db()->prepare('DELETE FROM portfolio_sections WHERE id = :i')
+                ->execute([':i' => (int)($_POST['section_id'] ?? 0)]);
+            kv_del('poll:last:quotes');
+            $msg = 'Section removed — its positions are now Ungrouped.';
             $dirty = true;
             break;
 
@@ -188,6 +235,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $holdings = holdings_rows();
+$sections = sections_rows();
 $pollers = [];
 foreach (array_keys(POLL_INTERVALS) as $name) {
     $pollers[$name] = kv_get("poll:last:$name");
@@ -245,6 +293,8 @@ function ago(?int $ts): string {
   .ok { color:var(--gain); } .err { color:var(--loss); }
   .hint { font-size:12px; color:var(--tx-2); margin-top:6px; }
   form.inline { display:contents; }
+  tr.hrow-edit { cursor:pointer; }
+  tr.hrow-edit:hover td { background:#0c1118; }
 </style>
 </head>
 <body<?= $embed ? ' class="embed"' : '' ?>>
@@ -400,16 +450,64 @@ foreach ($rssFeeds as $f => [$title, $action, $defFeeds, $defMax, $defAge, $defI
 
 <?php if (show_sec('portfolio')): ?>
 <section>
+  <h2>Section management</h2>
+  <?php if ($sections): ?>
+  <table>
+    <tr><th>Section</th><th></th></tr>
+    <?php foreach ($sections as $s): ?>
+    <tr>
+      <td>
+        <form method="post" style="display:flex; gap:8px; align-items:center; margin:0">
+          <input type="hidden" name="action" value="section_rename">
+          <input type="hidden" name="section_id" value="<?= (int)$s['id'] ?>">
+          <input name="section_name" value="<?= e($s['name']) ?>" style="flex:1">
+          <button style="margin:0">Rename</button>
+        </form>
+      </td>
+      <td style="text-align:right">
+        <form method="post" class="inline">
+          <input type="hidden" name="action" value="section_delete">
+          <input type="hidden" name="section_id" value="<?= (int)$s['id'] ?>">
+          <button class="danger">Remove</button>
+        </form>
+      </td>
+    </tr>
+    <?php endforeach; ?>
+  </table>
+  <?php else: ?>
+  <p class="hint">No sections yet — add one below, then assign positions to it when adding or
+  updating a holding. Positions left unassigned show under “Ungrouped”.</p>
+  <?php endif; ?>
+  <form method="post">
+    <input type="hidden" name="action" value="section_add">
+    <div class="row">
+      <div><label>New section name</label><input name="section_name" placeholder="Retirement" required></div>
+    </div>
+    <button>Add section</button>
+  </form>
+</section>
+
+<section>
   <h2>Portfolio holdings</h2>
   <?php if ($holdings): ?>
+  <p class="hint">Click a row to load it into the form below for editing.</p>
   <table>
-    <tr><th>Ticker</th><th>Name</th><th class="num">Shares</th><th class="num">Avg cost</th><th></th></tr>
-    <?php foreach ($holdings as $h): ?>
-    <tr>
+    <tr><th>Ticker</th><th>Name</th><th class="num">Shares</th><th class="num">Avg cost</th><th>Section</th><th></th></tr>
+    <?php foreach ($holdings as $h):
+      $qtyStr = rtrim(rtrim(number_format((float)$h['quantity'], 4, '.', ''), '0'), '.');
+      $avgStr = $h['avg_cost'] === null ? '' : rtrim(rtrim(number_format((float)$h['avg_cost'], 4, '.', ''), '0'), '.');
+    ?>
+    <tr class="hrow-edit"
+        data-ticker="<?= e($h['ticker']) ?>"
+        data-name="<?= e($h['name']) ?>"
+        data-quantity="<?= e($qtyStr) ?>"
+        data-avg="<?= e($avgStr) ?>"
+        data-section="<?= (int)($h['section_id'] ?? 0) ?>">
       <td><?= e($h['ticker']) ?></td>
       <td><?= e($h['name']) ?></td>
-      <td class="num"><?= e(rtrim(rtrim(number_format((float)$h['quantity'], 4, '.', ''), '0'), '.')) ?></td>
-      <td class="num">$<?= e(number_format((float)$h['avg_cost'], 2)) ?></td>
+      <td class="num"><?= e($qtyStr) ?></td>
+      <td class="num"><?= $h['avg_cost'] === null ? '—' : '$' . e(number_format((float)$h['avg_cost'], 2)) ?></td>
+      <td><?= e($h['section'] ?? 'Ungrouped') ?></td>
       <td style="text-align:right">
         <form method="post" class="inline">
           <input type="hidden" name="action" value="holding_delete">
@@ -427,13 +525,24 @@ foreach ($rssFeeds as $f => [$title, $action, $defFeeds, $defMax, $defAge, $defI
   <form method="post">
     <input type="hidden" name="action" value="holding_add">
     <div class="row">
-      <div><label>Ticker</label><input name="ticker" placeholder="AAPL" required></div>
-      <div><label>Name (optional)</label><input name="name" placeholder="Apple Inc."></div>
-      <div><label>Shares</label><input name="quantity" type="number" step="any" min="0" required></div>
-      <div><label>Avg cost / share</label><input name="avg_cost" type="number" step="any" min="0" required></div>
+      <div><label>Ticker</label><input id="h-ticker" name="ticker" placeholder="AAPL" required></div>
+      <div><label>Name (optional)</label><input id="h-name" name="name" placeholder="Apple Inc."></div>
+      <div><label>Shares</label><input id="h-quantity" name="quantity" type="number" step="any" min="0" required></div>
+      <div><label>Avg cost / share (optional)</label><input id="h-avg" name="avg_cost" type="number" step="any" min="0" placeholder="0"></div>
+      <div><label>Section</label>
+        <select id="h-section" name="section_id">
+          <option value="0">Ungrouped</option>
+          <?php foreach ($sections as $s): ?>
+          <option value="<?= (int)$s['id'] ?>"><?= e($s['name']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
     </div>
     <button>Add / update holding</button>
   </form>
+  <p class="hint">Leave avg cost blank (or 0) when you don't have a basis — the position still
+  counts toward equity and today's change, but shows “—” for lifetime and is left out of the
+  lifetime total so it can't inflate your gains.</p>
 </section>
 <?php endif; ?>
 
@@ -512,6 +621,24 @@ foreach ($rssFeeds as $f => [$title, $action, $defFeeds, $defMax, $defAge, $defI
   are pulled (<code>ollama pull phi3:mini &amp;&amp; ollama pull gemma2:2b</code>).</p>
 </section>
 <?php endif; ?>
+
+<script>
+  // Click a holdings row (anywhere but the Remove button) to load its values
+  // into the add/update form — the form upserts on ticker, so this edits in place.
+  document.querySelectorAll('tr.hrow-edit').forEach(function (tr) {
+    tr.addEventListener('click', function (ev) {
+      if (ev.target.closest('form')) return;   // Remove button handles its own click
+      var set = function (id, v) { var el = document.getElementById(id); if (el) el.value = v; };
+      set('h-ticker',   tr.getAttribute('data-ticker'));
+      set('h-name',     tr.getAttribute('data-name'));
+      set('h-quantity', tr.getAttribute('data-quantity'));
+      set('h-avg',      tr.getAttribute('data-avg'));
+      set('h-section',  tr.getAttribute('data-section') || '0');
+      var t = document.getElementById('h-ticker');
+      if (t) { t.focus(); t.scrollIntoView({ block: 'nearest' }); }
+    });
+  });
+</script>
 
 <?php if ($embed): ?>
 <script>

@@ -155,10 +155,7 @@
     const s = API.get('portfolio:summary');
     if (!s) return;
     const eqEl = $('pf-equity-val');
-    F.countUp(eqEl, s.total_equity, (v) => {
-      const p = F.equityParts(v);
-      return p.dollars + '<span class="cents">' + p.cents + '</span>';
-    });
+    F.countUp(eqEl, s.total_equity, (v) => F.compact(v));
 
     const day = $('pf-day-chip');
     day.className = 'chip ' + F.updir(s.daily_change_dollar);
@@ -200,127 +197,30 @@
     $('pf-spark-hi').textContent = F.compact(pts[pts.length - 1]);
   };
 
-  /* ---------------- MOVER SLIDESHOW ---------------- */
-  var _moverCfg = {
-    top_mover: true, top_winner: true, top_loser_pct: true,
-    top_loser_dol: false, most_equity: true, most_ret_pct: true, most_ret_dol: false,
-  };
-  var _moverIdx    = 0;
-  var _moverTimer  = null;
-  var _moverActive = [];
-
-  var _MOVER_DEFS = [
-    {
-      key: 'top_mover', badge: 'Top Mover \u00b7 Today',
-      pick: function (hs) { return hs.reduce(function (a, b) { return Math.abs(b.percent_change_today) > Math.abs(a.percent_change_today) ? b : a; }); },
-      main: function (h) { return F.pct(h.percent_change_today); },
-      sub:  function (h) { return F.usdSigned(h.dollar_change_today); },
-      dir:  function (h) { return h.percent_change_today >= 0 ? 'up' : 'down'; },
-    },
-    {
-      key: 'top_winner', badge: 'Top Winner \u00b7 Today',
-      pick: function (hs) { var pos = hs.filter(function (h) { return h.percent_change_today > 0; }); return pos.length ? pos.reduce(function (a, b) { return b.percent_change_today > a.percent_change_today ? b : a; }) : null; },
-      main: function (h) { return F.pct(h.percent_change_today); },
-      sub:  function (h) { return F.usdSigned(h.dollar_change_today); },
-      dir:  function ()  { return 'up'; },
-    },
-    {
-      key: 'top_loser_pct', badge: 'Top Loser \u00b7 Today',
-      pick: function (hs) { var neg = hs.filter(function (h) { return h.percent_change_today < 0; }); return neg.length ? neg.reduce(function (a, b) { return b.percent_change_today < a.percent_change_today ? b : a; }) : null; },
-      main: function (h) { return F.pct(h.percent_change_today); },
-      sub:  function (h) { return F.usdSigned(h.dollar_change_today); },
-      dir:  function ()  { return 'down'; },
-    },
-    {
-      key: 'top_loser_dol', badge: 'Biggest Drop \u00b7 Today',
-      pick: function (hs) { var neg = hs.filter(function (h) { return h.dollar_change_today < 0; }); return neg.length ? neg.reduce(function (a, b) { return b.dollar_change_today < a.dollar_change_today ? b : a; }) : null; },
-      main: function (h) { return F.usdSigned(h.dollar_change_today, 0); },
-      sub:  function (h) { return F.pct(h.percent_change_today); },
-      dir:  function ()  { return 'down'; },
-    },
-    {
-      key: 'most_equity', badge: 'Largest Position',
-      pick: function (hs) { return hs.reduce(function (a, b) { return (b.equity || 0) > (a.equity || 0) ? b : a; }); },
-      main: function (h) { return F.usd(h.equity, 0); },
-      sub:  function (h) { return F.pct(h.percent_change_today) + ' today'; },
-      dir:  function (h) { return h.percent_change_today >= 0 ? 'up' : 'down'; },
-    },
-    {
-      key: 'most_ret_pct', badge: 'Best % Return',
-      pick: function (hs) { return hs.reduce(function (a, b) { return (b.total_return_percent || 0) > (a.total_return_percent || 0) ? b : a; }); },
-      main: function (h) { return F.pct(h.total_return_percent); },
-      sub:  function (h) { return F.usdSigned(h.total_return_dollar, 0) + ' total'; },
-      dir:  function (h) { return (h.total_return_percent || 0) >= 0 ? 'up' : 'down'; },
-    },
-    {
-      key: 'most_ret_dol', badge: 'Best $ Return',
-      pick: function (hs) { return hs.reduce(function (a, b) { return (b.total_return_dollar || 0) > (a.total_return_dollar || 0) ? b : a; }); },
-      main: function (h) { return F.usdSigned(h.total_return_dollar, 0); },
-      sub:  function (h) { return F.pct(h.total_return_percent) + ' total'; },
-      dir:  function (h) { return (h.total_return_dollar || 0) >= 0 ? 'up' : 'down'; },
-    },
-  ];
-
-  function _renderMoverAt(idx) {
-    var def = _moverActive[idx];
-    if (!def) return;
-    var hs = API.get('portfolio:holdings');
-    if (!hs || !hs.length) return;
-    var h = def.pick(hs);
-    if (!h) return;
-    var dir = def.dir(h);
-    var el = $('mover-hero');
-    el.className = 'mover-hero ' + dir;
-    el.innerHTML =
-      '<div class="arrow">' + (dir === 'up' ? '\u25B2' : '\u25BC') + '</div>' +
-      '<div><div class="mtick">' + F.esc(h.ticker) + '</div>' +
-      '<div class="mname">' + F.esc(h.name) + '</div></div>' +
-      '<div class="mpct"><div class="badge">' + def.badge + '</div>' +
-      '<div class="p">' + def.main(h) + '</div>' +
-      '<div class="d">' + def.sub(h) + '</div></div>';
-    var pips = $('mover-pips');
-    if (pips && _moverActive.length > 1) {
-      pips.innerHTML = _moverActive.map(function (_, i) {
-        return '<span class="mpip' + (i === idx ? ' active' : '') + '"></span>';
-      }).join('');
-    } else if (pips) {
-      pips.innerHTML = '';
-    }
+  /* ---------------- HOLDINGS LIST ---------------- */
+  // Per-section collapse state, remembered per browser and keyed by section name.
+  var _COLLAPSE_KEY = 'dash:holdCollapsed';
+  function _collapsedMap() {
+    try { return JSON.parse(localStorage.getItem(_COLLAPSE_KEY)) || {}; }
+    catch (e) { return {}; }
+  }
+  function _isCollapsed(name) { return _collapsedMap()[name] === true; }
+  function _toggleCollapsed(name) {
+    var m = _collapsedMap();
+    if (m[name]) delete m[name]; else m[name] = true;
+    try { localStorage.setItem(_COLLAPSE_KEY, JSON.stringify(m)); } catch (e) {}
   }
 
-  P.setMoverSlides = function (cfg) {
-    if (cfg) _moverCfg = cfg;
-    P.mover();
-  };
+  var _holdClickWired = false;
 
-  P.mover = function () {
-    var hs = API.get('portfolio:holdings');
-    if (!hs || !hs.length) return;
-    var newActive = _MOVER_DEFS.filter(function (d) {
-      return _moverCfg[d.key] && d.pick(hs);
-    });
-    if (!newActive.length) return;
-    var countChanged = newActive.length !== _moverActive.length;
-    _moverActive = newActive;
-    if (_moverIdx >= _moverActive.length) _moverIdx = 0;
-    _renderMoverAt(_moverIdx);
-    // Only (re)start the timer when slide count changes or no timer is running yet —
-    // prevents the mock 3.2s tick from resetting the timer before it can fire.
-    if (countChanged || !_moverTimer) {
-      if (_moverTimer) clearInterval(_moverTimer);
-      _moverTimer = _moverActive.length > 1 ? setInterval(function () {
-        _moverIdx = (_moverIdx + 1) % _moverActive.length;
-        _renderMoverAt(_moverIdx);
-      }, 5000) : null;
-    }
-  };
-
-  /* ---------------- HOLDINGS LIST ---------------- */
   P.holdings = function () {
     const hs = API.get('portfolio:holdings');
     if (!hs) return;
+
     const rowHTML = (h) => {
-      const dc = F.sign(h.percent_change_today), tc = F.sign(h.total_return_dollar);
+      const dc = F.sign(h.percent_change_today);
+      // No cost basis → neutral (not red) and a — lifetime cell.
+      const tc = h.total_return_dollar == null ? '' : F.sign(h.total_return_dollar);
       return '<div class="hrow" data-tk="' + h.ticker + '">' +
         '<div class="sym"><span class="t">' + F.esc(h.ticker) + '</span>' +
         '<span class="n">' + F.esc(h.name) + '</span></div>' +
@@ -332,12 +232,71 @@
         '<span class="sub ' + tc + '">' + F.usdSigned(h.total_return_dollar, 0) + '</span></div>' +
         '</div>';
     };
+
+    // Group by section, preserving the global equity-desc order within a group
+    // and ordering groups by section_order (Ungrouped sentinel sorts last).
+    const groups = [];
+    const byName = {};
+    hs.forEach((h) => {
+      const name = h.section || 'Ungrouped';
+      let g = byName[name];
+      if (!g) {
+        g = byName[name] = { name: name, order: h.section_order == null ? 9999 : h.section_order, rows: [] };
+        groups.push(g);
+      }
+      g.rows.push(h);
+    });
+    groups.sort((a, b) => (a.order - b.order) || a.name.localeCompare(b.name));
+
+    const groupHTML = (g) => {
+      let eq = 0, day = 0, prev = 0, knownEq = 0, knownCost = 0, hasKnown = false;
+      g.rows.forEach((h) => {
+        eq   += h.equity || 0;
+        day  += h.dollar_change_today || 0;
+        prev += (h.equity || 0) - (h.dollar_change_today || 0);
+        if (h.total_return_dollar != null) {
+          hasKnown = true;
+          knownEq   += h.equity || 0;
+          knownCost += (h.equity || 0) - h.total_return_dollar;
+        }
+      });
+      const dayPct = prev > 0 ? (day / prev) * 100 : 0;
+      const totRet = knownEq - knownCost;
+      const totPct = knownCost > 0 ? (totRet / knownCost) * 100 : null;
+      const dc = F.sign(day);
+      const tc = hasKnown ? F.sign(totRet) : '';
+      const collapsed = _isCollapsed(g.name);
+      return '<div class="hgroup' + (collapsed ? ' collapsed' : '') + '">' +
+        '<div class="hgroup-head" data-sec="' + F.esc(g.name) + '">' +
+          '<span class="glabel"><span class="caret">▾</span>' +
+          '<span class="gname">' + F.esc(g.name) + '</span>' +
+          '<span class="gcount">' + g.rows.length + '</span></span>' +
+          '<span class="num eq">' + F.usd(eq, 0) + '</span>' +
+          '<span class="num day ' + dc + '">' + F.pct(dayPct) + '</span>' +
+          '<span class="num tot ' + tc + '">' + (totPct == null ? '—' : F.pct(totPct)) + '</span>' +
+        '</div>' +
+        '<div class="hgroup-rows">' + g.rows.map(rowHTML).join('') + '</div>' +
+      '</div>';
+    };
+
     // User-scrolled list — render once, preserving the reader's scroll position
     // across data refreshes.
     const sc = $('holdings-scroll');
     const top = sc ? sc.scrollTop : 0;
-    $('holdings-track').innerHTML = hs.map(rowHTML).join('');
+    const track = $('holdings-track');
+    track.innerHTML = groups.map(groupHTML).join('');
     if (sc) sc.scrollTop = top;
+
+    // Delegate collapse toggling once; the listener survives innerHTML refreshes.
+    if (!_holdClickWired && track) {
+      _holdClickWired = true;
+      track.addEventListener('click', (ev) => {
+        const head = ev.target.closest('.hgroup-head');
+        if (!head) return;
+        _toggleCollapsed(head.getAttribute('data-sec'));
+        head.parentElement.classList.toggle('collapsed');
+      });
+    }
   };
 
   /* ---------------- GLOBAL NEWS ---------------- */

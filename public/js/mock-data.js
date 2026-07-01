@@ -6,19 +6,22 @@
   const now = () => new Date().toISOString();
 
   // ---- Holdings (matches Holding model) ----
+  // section/average_buy_price mirror the admin model: a null avg cost is an
+  // unknown basis (no lifetime return), and no section renders as "Ungrouped".
+  const SECTION_ORDER = { 'Core Tech': 1, 'Defense': 2, 'Speculative': 3 };
   const HOLDINGS = [
-    { ticker: 'NVDA', name: 'NVIDIA Corp',        quantity: 46,  average_buy_price: 78.40,  current_price: 171.22, pe_ratio: 52.3 },
-    { ticker: 'PLTR', name: 'Palantir Tech',      quantity: 240, average_buy_price: 24.10,  current_price: 41.86,  pe_ratio: 218.4 },
-    { ticker: 'MSFT', name: 'Microsoft Corp',     quantity: 22,  average_buy_price: 312.55, current_price: 468.90, pe_ratio: 37.1 },
-    { ticker: 'AAPL', name: 'Apple Inc',          quantity: 54,  average_buy_price: 168.20, current_price: 224.15, pe_ratio: 34.6 },
-    { ticker: 'LMT',  name: 'Lockheed Martin',    quantity: 14,  average_buy_price: 432.10, current_price: 489.55, pe_ratio: 19.2 },
-    { ticker: 'AMD',  name: 'Advanced Micro Dev', quantity: 70,  average_buy_price: 132.80, current_price: 119.04, pe_ratio: 41.8 },
-    { ticker: 'RTX',  name: 'RTX Corporation',    quantity: 60,  average_buy_price: 96.40,  current_price: 128.72, pe_ratio: 27.5 },
-    { ticker: 'RKLB', name: 'Rocket Lab USA',     quantity: 300, average_buy_price: 6.85,   current_price: 24.18,  pe_ratio: null },
-    { ticker: 'AMZN', name: 'Amazon.com Inc',     quantity: 28,  average_buy_price: 142.30, current_price: 219.40, pe_ratio: 44.9 },
-    { ticker: 'GOOGL',name: 'Alphabet Inc',       quantity: 30,  average_buy_price: 138.90, current_price: 184.66, pe_ratio: 26.3 },
-    { ticker: 'TSLA', name: 'Tesla Inc',          quantity: 24,  average_buy_price: 248.60, current_price: 198.30, pe_ratio: 61.7 },
-    { ticker: 'CRWD', name: 'CrowdStrike',        quantity: 12,  average_buy_price: 268.40, current_price: 421.10, pe_ratio: 98.2 },
+    { ticker: 'NVDA', name: 'NVIDIA Corp',        section: 'Core Tech',   quantity: 46,  average_buy_price: 78.40,  current_price: 171.22, pe_ratio: 52.3 },
+    { ticker: 'PLTR', name: 'Palantir Tech',      section: 'Speculative', quantity: 240, average_buy_price: 24.10,  current_price: 41.86,  pe_ratio: 218.4 },
+    { ticker: 'MSFT', name: 'Microsoft Corp',     section: 'Core Tech',   quantity: 22,  average_buy_price: 312.55, current_price: 468.90, pe_ratio: 37.1 },
+    { ticker: 'AAPL', name: 'Apple Inc',          section: 'Core Tech',   quantity: 54,  average_buy_price: 168.20, current_price: 224.15, pe_ratio: 34.6 },
+    { ticker: 'LMT',  name: 'Lockheed Martin',    section: 'Defense',     quantity: 14,  average_buy_price: 432.10, current_price: 489.55, pe_ratio: 19.2 },
+    { ticker: 'AMD',  name: 'Advanced Micro Dev', section: null,          quantity: 70,  average_buy_price: null,   current_price: 119.04, pe_ratio: 41.8 },
+    { ticker: 'RTX',  name: 'RTX Corporation',    section: 'Defense',     quantity: 60,  average_buy_price: 96.40,  current_price: 128.72, pe_ratio: 27.5 },
+    { ticker: 'RKLB', name: 'Rocket Lab USA',     section: 'Speculative', quantity: 300, average_buy_price: 6.85,   current_price: 24.18,  pe_ratio: null },
+    { ticker: 'AMZN', name: 'Amazon.com Inc',     section: 'Core Tech',   quantity: 28,  average_buy_price: 142.30, current_price: 219.40, pe_ratio: 44.9 },
+    { ticker: 'GOOGL',name: 'Alphabet Inc',       section: 'Core Tech',   quantity: 30,  average_buy_price: 138.90, current_price: 184.66, pe_ratio: 26.3 },
+    { ticker: 'TSLA', name: 'Tesla Inc',          section: 'Speculative', quantity: 24,  average_buy_price: 248.60, current_price: 198.30, pe_ratio: 61.7 },
+    { ticker: 'CRWD', name: 'CrowdStrike',        section: 'Speculative', quantity: 12,  average_buy_price: 268.40, current_price: 421.10, pe_ratio: 98.2 },
   ];
 
   // seed today's % move per holding (deterministic-ish baseline)
@@ -29,17 +32,20 @@
     const equity = h.current_price * h.quantity;
     const prevClose = h.current_price / (1 + dayPct / 100);
     const dayDollar = (h.current_price - prevClose) * h.quantity;
-    const cost = h.average_buy_price * h.quantity;
-    const totRet = equity - cost;
-    const totPct = cost ? (totRet / cost) * 100 : 0;
+    const hasCost = h.average_buy_price != null && h.average_buy_price > 0;
+    const cost = hasCost ? h.average_buy_price * h.quantity : null;
+    const totRet = hasCost ? equity - cost : null;
+    const totPct = hasCost ? (totRet / cost) * 100 : null;
+    const section = h.section || 'Ungrouped';
     return {
       ticker: h.ticker, name: h.name, quantity: h.quantity,
       average_buy_price: h.average_buy_price, current_price: h.current_price,
+      section: section, section_order: SECTION_ORDER[section] ?? 9999,
       equity: +equity.toFixed(2),
       percent_change_today: +dayPct.toFixed(2),
       dollar_change_today: +dayDollar.toFixed(2),
-      total_return_percent: +totPct.toFixed(2),
-      total_return_dollar: +totRet.toFixed(2),
+      total_return_percent: totPct == null ? null : +totPct.toFixed(2),
+      total_return_dollar: totRet == null ? null : +totRet.toFixed(2),
       pe_ratio: h.pe_ratio, updated_at: now(),
     };
   }
@@ -64,14 +70,6 @@
       buying_power: 4218.55,
       updated_at: now(),
     };
-  }
-
-  function movers(limit = 10) {
-    const hs = holdings();
-    return hs
-      .map(h => ({ ticker: h.ticker, name: h.name, percent_change: h.percent_change_today, dollar_change: h.dollar_change_today, direction: h.percent_change_today >= 0 ? 'up' : 'down' }))
-      .sort((a, b) => Math.abs(b.percent_change) - Math.abs(a.percent_change))
-      .slice(0, limit);
   }
 
   // ---- portfolio history (sparkline) — array of {adjusted_close_equity} like robin-stocks ----
@@ -191,7 +189,7 @@
   }
 
   window.MOCK = {
-    holdings, summary, movers, history, espp, weather, briefing,
+    holdings, summary, history, espp, weather, briefing,
     portfolioAnalysis, cyberDigest,
     global: () => GLOBAL.slice(), cyber: () => CYBER.slice(), truth: () => TRUTH.slice(),
   };

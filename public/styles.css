@@ -349,8 +349,7 @@ html, body {
 .pf-equity .lbl {
   font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--tx-4); margin-bottom: 3px;
 }
-.pf-equity .val { font-size: 46px; font-weight: 600; line-height: 0.95; letter-spacing: -0.01em; }
-.pf-equity .val .cents { font-size: 26px; color: var(--tx-3); }
+.pf-equity .val { font-size: 35px; font-weight: 600; line-height: 0.95; letter-spacing: -0.01em; }
 .pf-deltas { display: flex; flex-direction: column; gap: 7px; align-items: flex-end; }
 .pf-delta { display: flex; align-items: center; gap: 8px; }
 .pf-delta .k { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--tx-4); }
@@ -370,33 +369,6 @@ html, body {
   font-family: 'IBM Plex Mono'; font-size: 9.5px; color: var(--tx-4); letter-spacing: 0.06em;
 }
 
-/* mover hero */
-.mover-hero {
-  margin: 0 16px 13px; flex: none;
-  background: linear-gradient(120deg, var(--gain-dim), transparent 70%);
-  border: 1px solid var(--border-soft); border-radius: var(--r-sm);
-  padding: 12px 14px; display: flex; align-items: center; gap: 14px;
-  position: relative; overflow: hidden;
-}
-.mover-hero.down { background: linear-gradient(120deg, var(--loss-dim), transparent 70%); }
-.mover-hero .badge {
-  font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--tx-4);
-  display: block; margin-bottom: 4px;
-}
-.mover-hero .arrow { font-size: 34px; line-height: 1; font-family: 'IBM Plex Mono'; }
-.mover-hero.up .arrow { color: var(--gain); }
-.mover-hero.down .arrow { color: var(--loss); }
-.mover-hero .mtick { font-size: 22px; font-weight: 700; letter-spacing: 0.02em; }
-.mover-hero .mname { font-size: 11px; color: var(--tx-3); margin-top: 1px; max-width: 230px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mover-hero .mpct { margin-left: auto; text-align: right; }
-.mover-hero .mpct .p { font-family: 'IBM Plex Mono'; font-size: 24px; font-weight: 600; }
-.mover-hero.up .mpct .p { color: var(--gain); }
-.mover-hero.down .mpct .p { color: var(--loss); }
-.mover-hero .mpct .d { font-family: 'IBM Plex Mono'; font-size: 12px; color: var(--tx-3); }
-
-/* mover pips */
-.mover-wrap { display: flex; flex-direction: column; }
-.mover-pips { display: flex; justify-content: center; gap: 5px; height: 10px; align-items: center; margin-bottom: 4px; }
 .mpip { width: 4px; height: 4px; border-radius: 50%; background: var(--tx-5); transition: background 0.3s, transform 0.3s; flex-shrink: 0; }
 .mpip.active { background: var(--tx-2); transform: scale(1.5); }
 
@@ -440,6 +412,31 @@ html, body {
 .hrow .pos { color: var(--gain); }
 .hrow .neg { color: var(--loss); }
 .hrow .sub { display: block; font-size: 9.5px; color: var(--tx-4); font-weight: 400; margin-top: 1px; }
+
+/* collapsible section groups */
+.hgroup-head {
+  display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 8px; align-items: center;
+  padding: 7px 16px; cursor: pointer; user-select: none;
+  background: oklch(0.22 0.01 255 / 0.45); border-bottom: 1px solid var(--border-soft);
+}
+.hgroup-head:hover { background: oklch(0.26 0.012 255 / 0.5); }
+.hgroup-head .glabel { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.hgroup-head .caret { font-size: 10px; color: var(--tx-3); transition: transform 0.15s; }
+.hgroup.collapsed .hgroup-head .caret { transform: rotate(-90deg); }
+.hgroup-head .gname {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--tx-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hgroup-head .gcount {
+  font-family: 'IBM Plex Mono'; font-size: 9px; color: var(--tx-4);
+  background: var(--border-soft); border-radius: 8px; padding: 1px 6px; flex: none;
+}
+.hgroup-head .num { font-family: 'IBM Plex Mono'; font-size: 11.5px; text-align: right; color: var(--tx-3); }
+.hgroup-head .eq { color: var(--tx-2); font-weight: 600; }
+.hgroup-head .day, .hgroup-head .tot { font-weight: 600; }
+.hgroup-head .pos { color: var(--gain); }
+.hgroup-head .neg { color: var(--loss); }
+.hgroup.collapsed .hgroup-rows { display: none; }
 
 /* ============================================================
    NEWS (global + cyber shared)
@@ -780,8 +777,7 @@ a.nart.is-new:hover, a.cyber-art.is-new:hover {
   .col { gap: 12px; }
 
   /* ── Portfolio ── */
-  .pf-equity .val { font-size: 36px; }
-  .pf-equity .val .cents { font-size: 20px; }
+  .pf-equity .val { font-size: 27px; }
   .pf-delta .chip { font-size: 13px; min-width: 80px; }
 
   /* holdings: undo absolute positioning, allow natural scroll */
